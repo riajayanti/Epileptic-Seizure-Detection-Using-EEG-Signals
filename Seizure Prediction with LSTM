@@ -1,4 +1,4 @@
-# 1) Setup and Imports
+# 1) SETUP AND IMPORTS 
 
 !pip install mne # Install the 'mne' libraryimport numpy as np
 import tensorflow as tf
@@ -21,7 +21,7 @@ import seaborn as sns
 from datetime import datetime
 import mne 
 
-# 2) Model Architecture 
+# 2) MODEL ARCHITECTURE  
 
 class SeizurePredictor:
     def __init__(self,
@@ -140,7 +140,7 @@ class SeizurePredictor:
 
         return callbacks
 
-# 3) Training Pipeline 
+# 3) TRAINING PIPELINE 
 class TrainingPipeline:
     def __init__(self, predictor):
         """Initialize training pipeline
@@ -216,6 +216,119 @@ class TrainingPipeline:
         plt.show()
 
         return y_pred_prob
+
+4) USAGE EXAMPLE 
+
+import numpy as np
+import mne
+from sklearn.model_selection import train_test_split
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import LSTM, Dense
+from tensorflow.keras.optimizers import Adam
+from sklearn.metrics import accuracy_score, classification_report, roc_auc_score
+from imblearn.over_sampling import SMOTE
+from collections import Counter
+from tensorflow.keras.callbacks import EarlyStopping
+
+# Function to preprocess raw EEG data into epochs
+def preprocess_raw_data(file_path, selected_channels, epoch_length=1):
+    raw = mne.io.read_raw_edf(file_path, preload=True)
+    raw.pick_channels(selected_channels)
+    sampling_rate = int(raw.info['sfreq'])
+    samples_per_epoch = epoch_length * sampling_rate
+
+    data, _ = raw[:]
+    num_samples = data.shape[1]
+    epochs = [data[:, i:i+samples_per_epoch] for i in range(0, num_samples, samples_per_epoch) if i+samples_per_epoch <= num_samples]
+
+    return np.array(epochs)
+
+# Function to create labels from seizure annotations
+def create_labels_from_annotations(epochs, annotations, sampling_rate=256, epoch_length=1):
+    num_epochs = len(epochs)
+    samples_per_epoch = sampling_rate * epoch_length
+    labels = np.zeros(num_epochs)
+
+    for i in range(num_epochs):
+        epoch_start_time = (i * samples_per_epoch) / sampling_rate
+        epoch_end_time = epoch_start_time + epoch_length
+
+        for annotation in annotations:
+            if (epoch_start_time < annotation["end_time"]) and (epoch_end_time > annotation["start_time"]):
+                labels[i] = 1
+
+    return labels
+
+# Function to balance data using SMOTE
+def balance_seizure_data(epochs_array, labels):
+    n_epochs, n_channels, n_timepoints = epochs_array.shape
+    X_reshaped = epochs_array.reshape(n_epochs, n_channels * n_timepoints)
+
+    smote = SMOTE(sampling_strategy=0.7)  # Increased the SMOTE ratio
+    X_balanced, y_balanced = smote.fit_resample(X_reshaped, labels)
+
+    X_balanced_3d = X_balanced.reshape(-1, n_channels, n_timepoints)
+    print("Original class distribution:", Counter(labels))
+    print("Balanced class distribution:", Counter(y_balanced))
+    return X_balanced_3d, y_balanced
+
+# Function to validate balanced data
+def validate_balanced_data(X_balanced, y_balanced):
+    if np.any(np.isnan(X_balanced)) or np.any(np.isinf(X_balanced)):
+        raise ValueError("Dataset contains NaN or infinite values")
+    class_counts = Counter(y_balanced)
+    ratio = min(class_counts.values()) / max(class_counts.values())
+    if ratio < 0.4:
+        print("Warning: Classes still significantly imbalanced")
+
+# Main Script
+if __name__ == "__main__":
+    file_path = '/content/drive/Shareddrives/riajayanti/physionet.org/files/chbmit/1.0.0/chb02/chb02_01.edf'
+    seizure_annotations = [
+        {"start_time": 500, "end_time": 560},
+        {"start_time": 1000, "end_time": 1040},
+    ]
+
+    selected_channels = ['FP1-F7', 'FP2-F8', 'F7-T7', 'F8-T8', 'FZ-CZ', 'CZ-PZ']
+    epochs = preprocess_raw_data(file_path, selected_channels, epoch_length=1)
+    ictal_labels = create_labels_from_annotations(epochs, seizure_annotations)
+
+    # Normalize epochs
+    epochs_normalized = epochs / np.max(np.abs(epochs), axis=(1, 2), keepdims=True)
+
+    # Balance the data using SMOTE
+    X_balanced, y_balanced = balance_seizure_data(epochs_normalized, ictal_labels)
+    validate_balanced_data(X_balanced, y_balanced)
+
+    # Reshape for LSTM compatibility
+    X_seq = X_balanced.transpose(0, 2, 1)
+
+    # Split into train and test sets with stratification
+    X_train, X_test, y_train, y_test = train_test_split(
+        X_seq, y_balanced, test_size=0.3, random_state=123, stratify=y_balanced
+    )
+
+    # Build the LSTM model
+    model = Sequential()
+    model.add(LSTM(128, input_shape=(X_train.shape[1], X_train.shape[2]), return_sequences=False))  # LSTM units = 128; return_sequences = False
+    model.add(Dense(1, activation='sigmoid'))  # Single output for binary classification
+    model.compile(optimizer=Adam(learning_rate=0.0005), loss='binary_crossentropy', metrics=['accuracy'])  # Learning rate = 0.0005
+
+    # Set up EarlyStopping
+    early_stopping = EarlyStopping(monitor='val_loss', patience=4, restore_best_weights=True)  # Patience = 4
+
+    # Train the model
+    model.fit(X_train, y_train, epochs=10, batch_size=64, validation_data=(X_test, y_test), callbacks=[early_stopping])  # Epochs = 10; Batch size = 64
+
+    # Evaluate the model
+    y_pred = (model.predict(X_test) > 0.5).astype(int)
+    accuracy = accuracy_score(y_test, y_pred)
+    print(f'Accuracy: {accuracy:.4f}')
+
+    print(classification_report(y_test, y_pred))
+    auc = roc_auc_score(y_test, model.predict(X_test))
+    print(f'ROC-AUC: {auc:.4f}')
+
 
 
 
