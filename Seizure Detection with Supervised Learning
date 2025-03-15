@@ -71,7 +71,6 @@ print("All Files (Unsorted)", file_order)
 print("Number of files in folder", count_of_files)
 
 # This function reads time in HH:MINS:SEC format and converts it into Seconds
-# HOW DOES IT KNOW HOW TO SORT TIME ACROSS MULTIPLE DAYS OF DATA
 def get_hr(time):
     hr, minute, sec = time.split(":")
     hr_int = float(hr) * 3600
