@@ -777,6 +777,14 @@ Counter(labels)
 
 # 7) SEIZURE DETECTION MODELS 
 
+"""
+Confusion Matrix Key: 
+    True Negative (Top-Left Quadrant)
+    False Positive (Top-Right Quadrant)
+    False Negative (Bottom-Left Quadrant)
+    True Positive (Bottom-Right Quadrant)
+"""
+
 # a) K-NEAREST NEIGHBORS (KNN)
 
 from sklearn.model_selection import train_test_split, cross_val_score
@@ -812,12 +820,6 @@ def sklearn_knn(x_data, y_data, num_neighbors):
 score, recall = sklearn_knn(Epochs_2D_Array, labels, 2)
 print("Test Accuracy: ", score)
 print("Test Recall: ", recall)
-
-
-#True Negative (Top-Left Quadrant)
-#False Positive (Top-Right Quadrant)
-#False Negative (Bottom-Left Quadrant)
-#True Positive (Bottom-Right Quadrant)
 
 # b) LOGISTIC REGRESSION
 
