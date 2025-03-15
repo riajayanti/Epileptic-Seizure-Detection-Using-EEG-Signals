@@ -1,0 +1,2928 @@
+{
+  "cells": [
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "view-in-github",
+        "colab_type": "text"
+      },
+      "source": [
+        "<a href=\"https://colab.research.google.com/github/riajayanti/Epileptic-Seizure-Detection-and-Prediction-Using-EEG-Signals/blob/main/Seizure%20Detection%20with%20Supervised%20Learning\" target=\"_parent\"><img src=\"https://colab.research.google.com/assets/colab-badge.svg\" alt=\"Open In Colab\"/></a>"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "l7Dw9m2m-nga"
+      },
+      "source": [
+        "#**Setting Up**"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "frWvFWlKWTNW"
+      },
+      "source": [
+        "**Mount Google Drive that has the CHB-MIT EEG Dataset**"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "Vb-rTt6hlm8F",
+        "outputId": "74d7ba2d-c91c-44ad-8f8c-2a4ba7301361"
+      },
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Drive already mounted at /content/drive; to attempt to forcibly remount, call drive.mount(\"/content/drive\", force_remount=True).\n",
+            "/content/drive/Shareddrives/riajayanti/physionet.org/files/chbmit/1.0.0\n"
+          ]
+        }
+      ],
+      "source": [
+        "from google.colab import drive\n",
+        "drive.mount('/content/drive')\n",
+        "%cd /content/drive/Shareddrives/riajayanti/physionet.org/files/chbmit/1.0.0"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "xrmjvefwWSZT"
+      },
+      "source": [
+        "**Install Packages**"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "id": "J2rRkVb2meQG"
+      },
+      "outputs": [],
+      "source": [
+        "# %% capture suppresses all the comments in the output cells\n",
+        "%%capture\n",
+        "%pip install mne\n",
+        "%pip install pyriemann"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "JFBxuvKRlZks"
+      },
+      "source": [
+        "**Importing Libraries**"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "id": "ut_9eCEUlZkt"
+      },
+      "outputs": [],
+      "source": [
+        "\n",
+        "import glob\n",
+        "import numpy as np\n",
+        "import pandas as pd\n",
+        "import mne\n",
+        "import os\n",
+        "import matplotlib.pyplot as plt\n",
+        "import pickle\n",
+        "import pickletools\n",
+        "import gc\n",
+        "import shutil\n",
+        "\n",
+        "\n",
+        "from sklearn.model_selection import train_test_split, cross_val_score\n",
+        "from sklearn.neighbors import KNeighborsClassifier\n",
+        "from sklearn.metrics import accuracy_score\n",
+        "from sklearn.linear_model import LogisticRegression\n",
+        "from sklearn.ensemble import RandomForestClassifier\n",
+        "from sklearn.svm import SVC\n",
+        "\n",
+        "import pyriemann\n",
+        "from pyriemann import classification as classify\n",
+        "\n",
+        "from keras.layers import LSTM, Dense, RNN\n",
+        "from keras.callbacks import ReduceLROnPlateau\n"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "IbTHEy_KlZkv"
+      },
+      "source": [
+        "#**Sort Files by File Start Time**"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "hAJ3PFVTnsHx"
+      },
+      "source": [
+        "**Read Summary File. List all Files in Data Folder (Unsorted).**"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "id": "7_rXS8Oh-4L7",
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "outputId": "22835d83-68f6-4107-aa59-27fe006add40"
+      },
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Summary File:  /content/drive/Shareddrives/riajayanti/physionet.org/files/chbmit/1.0.0/chb01/chb01-summary.txt\n",
+            "All Files (Unsorted) {'11:42:54': 'chb01_01.edf', '12:42:57': 'chb01_02.edf', '13:43:04': 'chb01_03.edf', '14:43:12': 'chb01_04.edf', '15:43:19': 'chb01_05.edf', '16:43:26': 'chb01_06.edf', '17:43:33': 'chb01_07.edf', '18:43:40': 'chb01_08.edf', '19:43:56': 'chb01_09.edf', '20:44:07': 'chb01_10.edf', '21:44:14': 'chb01_11.edf', '22:44:22': 'chb01_12.edf', '23:44:29': 'chb01_13.edf', '00:44:37': 'chb01_14.edf', '01:44:44': 'chb01_15.edf', '02:44:51': 'chb01_16.edf', '03:44:59': 'chb01_17.edf', '04:45:06': 'chb01_18.edf', '05:45:13': 'chb01_19.edf', '06:45:20': 'chb01_20.edf', '07:33:46': 'chb01_21.edf', '08:33:49': 'chb01_22.edf', '09:33:58': 'chb01_23.edf', '10:34:06': 'chb01_24.edf', '11:34:14': 'chb01_25.edf', '12:34:22': 'chb01_26.edf', '13:13:21': 'chb01_27.edf', '13:24:08': 'chb01_29.edf', '14:24:15': 'chb01_30.edf', '15:24:24': 'chb01_31.edf', '16:24:32': 'chb01_32.edf', '17:24:39': 'chb01_33.edf', '18:24:46': 'chb01_34.edf', '22:14:43': 'chb01_36.edf', '23:14:46': 'chb01_37.edf', '00:14:53': 'chb01_38.edf', '01:15:01': 'chb01_39.edf', '02:15:08': 'chb01_40.edf', '03:15:15': 'chb01_41.edf', '04:15:22': 'chb01_42.edf', '05:15:29': 'chb01_43.edf', '08:15:51': 'chb01_46.edf'}\n",
+            "Number of files in folder 42\n"
+          ]
+        }
+      ],
+      "source": [
+        "# Run each data folder one by one. Later we will add code to combine.\n",
+        "\n",
+        "#/content/drive/Shareddrives/riajayanti/physionet.org/files/chbmit/1.0.0\n",
+        "#/content/drive/Shareddrives/riajayanti/physionet.org/files/chbmit/1.0.0/chb01/chb01_01.edf\n",
+        "#/content/drive/Shareddrives/riajayanti/physionet.org/files/chbmit/1.0.0/chb01/chb01_03.edf.seizures\n",
+        "\n",
+        "data_folder = '/content/drive/Shareddrives/riajayanti/physionet.org/files/chbmit/1.0.0/chb01/'\n",
+        "\n",
+        "\n",
+        "\n",
+        "# This functions takes in file name (e.g. chb01_02.edf) and returns folder name (e.g. chb01)\n",
+        "def get_folder_name(file_name):\n",
+        "    folder_name, num = file_name.split(\"_\")\n",
+        "    return folder_name\n",
+        "\n",
+        "\n",
+        "# This function takes in folder name and returns the summary file in that folder\n",
+        "def get_summary_file(data_folder):\n",
+        "    for file in os.listdir(data_folder):\n",
+        "        #checking to see if it has summary\n",
+        "        if len(str(file).split(\"-\")) > 1:\n",
+        "            return file\n",
+        "\n",
+        "summary_file = data_folder + get_summary_file(data_folder)\n",
+        "print (\"Summary File: \", summary_file)\n",
+        "\n",
+        "# This function reads the summary file and returns all the file names (unsorted), file start time and file end time\n",
+        "# File_Order has File Name and File Start Time. File_End has File End Time. Count of files has number of files in data folder\n",
+        "def get_file_start(summary):\n",
+        "    file_order = {}\n",
+        "    file_end = []\n",
+        "    count_of_files = 0\n",
+        "    summary = open(summary, \"r\")\n",
+        "    lines = summary.readlines()\n",
+        "    for index in range(len(lines)):\n",
+        "        words = (lines[index]).split(\" \")\n",
+        "        if \"File Name\" in lines[index]:\n",
+        "            name = words[2].strip()\n",
+        "        if \"File Start\" in lines[index]:\n",
+        "            time = words[3].strip()\n",
+        "            file_order.update({time:name})\n",
+        "            #convert time and name back to nothing\n",
+        "            time = \"\"\n",
+        "            name = \"\"\n",
+        "            count_of_files += 1\n",
+        "        if \"File End\" in lines[index]:\n",
+        "            end = words[3].strip()\n",
+        "            file_end.append(end)\n",
+        "\n",
+        "    return file_order, file_end, count_of_files\n",
+        "\n",
+        "file_order, file_end, count_of_files = get_file_start(summary_file)\n",
+        "print(\"All Files (Unsorted)\", file_order)\n",
+        "print(\"Number of files in folder\", count_of_files)"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "fZ52wACjokBQ"
+      },
+      "source": [
+        "**Sort All Files in Folder by File Start Time.**"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "id": "38uurF41oB71",
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "outputId": "bfd672af-f949-40a9-c4bc-a716172fdec6"
+      },
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "All Files (Sorted):  {893.0: 'chb01_38.edf', 2677.0: 'chb01_14.edf', 4501.0: 'chb01_39.edf', 6284.0: 'chb01_15.edf', 8108.0: 'chb01_40.edf', 9891.0: 'chb01_16.edf', 11715.0: 'chb01_41.edf', 13499.0: 'chb01_17.edf', 15322.0: 'chb01_42.edf', 17106.0: 'chb01_18.edf', 18929.0: 'chb01_43.edf', 20713.0: 'chb01_19.edf', 24320.0: 'chb01_20.edf', 27226.0: 'chb01_21.edf', 29751.0: 'chb01_46.edf', 30829.0: 'chb01_22.edf', 34438.0: 'chb01_23.edf', 38046.0: 'chb01_24.edf', 41654.0: 'chb01_25.edf', 42174.0: 'chb01_01.edf', 45262.0: 'chb01_26.edf', 45777.0: 'chb01_02.edf', 47601.0: 'chb01_27.edf', 48248.0: 'chb01_29.edf', 49384.0: 'chb01_03.edf', 51855.0: 'chb01_30.edf', 52992.0: 'chb01_04.edf', 55464.0: 'chb01_31.edf', 56599.0: 'chb01_05.edf', 59072.0: 'chb01_32.edf', 60206.0: 'chb01_06.edf', 62679.0: 'chb01_33.edf', 63813.0: 'chb01_07.edf', 66286.0: 'chb01_34.edf', 67420.0: 'chb01_08.edf', 71036.0: 'chb01_09.edf', 74647.0: 'chb01_10.edf', 78254.0: 'chb01_11.edf', 80083.0: 'chb01_36.edf', 81862.0: 'chb01_12.edf', 83686.0: 'chb01_37.edf', 85469.0: 'chb01_13.edf'}\n",
+            "All File Names Only (Sorted) ['chb01_38.edf', 'chb01_14.edf', 'chb01_39.edf', 'chb01_15.edf', 'chb01_40.edf', 'chb01_16.edf', 'chb01_41.edf', 'chb01_17.edf', 'chb01_42.edf', 'chb01_18.edf', 'chb01_43.edf', 'chb01_19.edf', 'chb01_20.edf', 'chb01_21.edf', 'chb01_46.edf', 'chb01_22.edf', 'chb01_23.edf', 'chb01_24.edf', 'chb01_25.edf', 'chb01_01.edf', 'chb01_26.edf', 'chb01_02.edf', 'chb01_27.edf', 'chb01_29.edf', 'chb01_03.edf', 'chb01_30.edf', 'chb01_04.edf', 'chb01_31.edf', 'chb01_05.edf', 'chb01_32.edf', 'chb01_06.edf', 'chb01_33.edf', 'chb01_07.edf', 'chb01_34.edf', 'chb01_08.edf', 'chb01_09.edf', 'chb01_10.edf', 'chb01_11.edf', 'chb01_36.edf', 'chb01_12.edf', 'chb01_37.edf', 'chb01_13.edf']\n",
+            "All Files Names with Full Path (Sorted) ['/content/drive/Shareddrives/riajayanti/physionet.org/files/chbmit/1.0.0/chb01/chb01_38.edf', '/content/drive/Shareddrives/riajayanti/physionet.org/files/chbmit/1.0.0/chb01/chb01_14.edf', '/content/drive/Shareddrives/riajayanti/physionet.org/files/chbmit/1.0.0/chb01/chb01_39.edf', '/content/drive/Shareddrives/riajayanti/physionet.org/files/chbmit/1.0.0/chb01/chb01_15.edf', '/content/drive/Shareddrives/riajayanti/physionet.org/files/chbmit/1.0.0/chb01/chb01_40.edf', '/content/drive/Shareddrives/riajayanti/physionet.org/files/chbmit/1.0.0/chb01/chb01_16.edf', '/content/drive/Shareddrives/riajayanti/physionet.org/files/chbmit/1.0.0/chb01/chb01_41.edf', '/content/drive/Shareddrives/riajayanti/physionet.org/files/chbmit/1.0.0/chb01/chb01_17.edf', '/content/drive/Shareddrives/riajayanti/physionet.org/files/chbmit/1.0.0/chb01/chb01_42.edf', '/content/drive/Shareddrives/riajayanti/physionet.org/files/chbmit/1.0.0/chb01/chb01_18.edf', '/content/drive/Shareddrives/riajayanti/physionet.org/files/chbmit/1.0.0/chb01/chb01_43.edf', '/content/drive/Shareddrives/riajayanti/physionet.org/files/chbmit/1.0.0/chb01/chb01_19.edf', '/content/drive/Shareddrives/riajayanti/physionet.org/files/chbmit/1.0.0/chb01/chb01_20.edf', '/content/drive/Shareddrives/riajayanti/physionet.org/files/chbmit/1.0.0/chb01/chb01_21.edf', '/content/drive/Shareddrives/riajayanti/physionet.org/files/chbmit/1.0.0/chb01/chb01_46.edf', '/content/drive/Shareddrives/riajayanti/physionet.org/files/chbmit/1.0.0/chb01/chb01_22.edf', '/content/drive/Shareddrives/riajayanti/physionet.org/files/chbmit/1.0.0/chb01/chb01_23.edf', '/content/drive/Shareddrives/riajayanti/physionet.org/files/chbmit/1.0.0/chb01/chb01_24.edf', '/content/drive/Shareddrives/riajayanti/physionet.org/files/chbmit/1.0.0/chb01/chb01_25.edf', '/content/drive/Shareddrives/riajayanti/physionet.org/files/chbmit/1.0.0/chb01/chb01_01.edf', '/content/drive/Shareddrives/riajayanti/physionet.org/files/chbmit/1.0.0/chb01/chb01_26.edf', '/content/drive/Shareddrives/riajayanti/physionet.org/files/chbmit/1.0.0/chb01/chb01_02.edf', '/content/drive/Shareddrives/riajayanti/physionet.org/files/chbmit/1.0.0/chb01/chb01_27.edf', '/content/drive/Shareddrives/riajayanti/physionet.org/files/chbmit/1.0.0/chb01/chb01_29.edf', '/content/drive/Shareddrives/riajayanti/physionet.org/files/chbmit/1.0.0/chb01/chb01_03.edf', '/content/drive/Shareddrives/riajayanti/physionet.org/files/chbmit/1.0.0/chb01/chb01_30.edf', '/content/drive/Shareddrives/riajayanti/physionet.org/files/chbmit/1.0.0/chb01/chb01_04.edf', '/content/drive/Shareddrives/riajayanti/physionet.org/files/chbmit/1.0.0/chb01/chb01_31.edf', '/content/drive/Shareddrives/riajayanti/physionet.org/files/chbmit/1.0.0/chb01/chb01_05.edf', '/content/drive/Shareddrives/riajayanti/physionet.org/files/chbmit/1.0.0/chb01/chb01_32.edf', '/content/drive/Shareddrives/riajayanti/physionet.org/files/chbmit/1.0.0/chb01/chb01_06.edf', '/content/drive/Shareddrives/riajayanti/physionet.org/files/chbmit/1.0.0/chb01/chb01_33.edf', '/content/drive/Shareddrives/riajayanti/physionet.org/files/chbmit/1.0.0/chb01/chb01_07.edf', '/content/drive/Shareddrives/riajayanti/physionet.org/files/chbmit/1.0.0/chb01/chb01_34.edf', '/content/drive/Shareddrives/riajayanti/physionet.org/files/chbmit/1.0.0/chb01/chb01_08.edf', '/content/drive/Shareddrives/riajayanti/physionet.org/files/chbmit/1.0.0/chb01/chb01_09.edf', '/content/drive/Shareddrives/riajayanti/physionet.org/files/chbmit/1.0.0/chb01/chb01_10.edf', '/content/drive/Shareddrives/riajayanti/physionet.org/files/chbmit/1.0.0/chb01/chb01_11.edf', '/content/drive/Shareddrives/riajayanti/physionet.org/files/chbmit/1.0.0/chb01/chb01_36.edf', '/content/drive/Shareddrives/riajayanti/physionet.org/files/chbmit/1.0.0/chb01/chb01_12.edf', '/content/drive/Shareddrives/riajayanti/physionet.org/files/chbmit/1.0.0/chb01/chb01_37.edf', '/content/drive/Shareddrives/riajayanti/physionet.org/files/chbmit/1.0.0/chb01/chb01_13.edf']\n"
+          ]
+        }
+      ],
+      "source": [
+        "# This function reads time in HH:MINS:SEC format and converts it into Seconds\n",
+        "# HOW DOES IT KNOW HOW TO SORT TIME ACROSS MULTIPLE DAYS OF DATA\n",
+        "def get_hr(time):\n",
+        "    hr, minute, sec = time.split(\":\")\n",
+        "    hr_int = float(hr) * 3600\n",
+        "    min_float = float(minute) * 60\n",
+        "    sec_float = float(sec)\n",
+        "    final = hr_int + min_float + sec_float\n",
+        "    return final\n",
+        "\n",
+        "# This function is used to sort the time. Is this function used?\n",
+        "#def sort_hr(hours):\n",
+        "#    return hours.sort()\n",
+        "\n",
+        "def sort_by_time(summary):\n",
+        "    file_order, file_end, count_of_files = get_file_start(summary) # already called before. Needed?\n",
+        "    new_file_order = {}\n",
+        "    hours = []\n",
+        "\n",
+        "    # This for loop gets all the file start time, converts into seconds, add to hours list\n",
+        "    for time, file in file_order.items():\n",
+        "        hour = get_hr(time)\n",
+        "        hours.append(hour)\n",
+        "        new_file_order.update({hour:file})\n",
+        "\n",
+        "    # Creates a new list called hours2 that sorts the original hours list\n",
+        "    hours2 = sorted(hours)\n",
+        "\n",
+        "    # Look at the sorted hours2 list, finds the corresponding file details and adds to sorted_list dictionary for All Files\n",
+        "    sorted_list = {}\n",
+        "    for hour in hours2:\n",
+        "        for time, file in new_file_order.items():\n",
+        "            if hour == time:\n",
+        "                sorted_list.update({hour: file})\n",
+        "\n",
+        "    # This for loop gets all the file end time, converts into seconds, add to end_times list\n",
+        "    end_times = []\n",
+        "    for val in file_end:\n",
+        "        time = get_hr(val)\n",
+        "        end_times.append(time)\n",
+        "    #print(end_times)\n",
+        "    end_times = sorted(end_times)\n",
+        "\n",
+        "    return sorted_list, end_times\n",
+        "\n",
+        "# new_file_order has all the files that are sorted by increasing file start time\n",
+        "new_file_order, file_end = sort_by_time(summary_file)\n",
+        "print (\"All Files (Sorted): \", new_file_order)\n",
+        "#print (file_end)\n",
+        "\n",
+        "# This function gets list of values from dictionary (Key: Value) pair\n",
+        "# Example new_file_order has start time (key) and file name (value), so this function will extract all the values (file names)\n",
+        "def get_value(dictionary):\n",
+        "    values = []\n",
+        "    for key, value in dictionary.items():\n",
+        "        values.append(value)\n",
+        "    return values\n",
+        "\n",
+        "# This function gets list of key from dictionary (Key: Value) pair\n",
+        "# Example new_file_order has start time (key) and file name (value), so this function will extract all the keys (start time)\n",
+        "def get_key(dictionary, val):\n",
+        "    for key, value in dictionary.items():\n",
+        "        if value == val:\n",
+        "            return key\n",
+        "\n",
+        "# New_File_Order has Time and FileName in Order. Next line will get just the FileName\n",
+        "ordered_files = get_value(new_file_order)\n",
+        "print (\"All File Names Only (Sorted)\", ordered_files)\n",
+        "\n",
+        "# This function will get file name along with folder path\n",
+        "def format_file_names(ordered_files):\n",
+        "    file_names = []\n",
+        "    for val in ordered_files:\n",
+        "        folder_name = get_folder_name(val)\n",
+        "\n",
+        "        file_names.append(\"/content/drive/Shareddrives/riajayanti/physionet.org/files/chbmit/1.0.0/\" + folder_name + \"/\" + val)\n",
+        "        #file_names.append(  folder_name + \"/\" + val)\n",
+        "    return file_names\n",
+        "\n",
+        "file_names = format_file_names(ordered_files)\n",
+        "print(\"All Files Names with Full Path (Sorted)\", file_names)\n"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "oMHFtdPDCDM4"
+      },
+      "source": [
+        "**Processing and Sorting Seizure Files**\n",
+        "\n",
+        "*   **Method** - file_name is already sorted. Read each file in file_name. If name matches seizure_name in csv file, then add to seizure_files. So seizure_files will also be in sorted order.\n",
+        "\n"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "def remove_excess_zeros(labels, epochs):\n",
+        "    seizure_indices = np.where(labels == 1)[0]  # Indices of 1s (seizures)\n",
+        "    retained_indices = set(seizure_indices)  # Start with all seizure indices\n",
+        "\n",
+        "    # Keep at least double the number of 0s before each 1\n",
+        "    for idx in seizure_indices:\n",
+        "        start_idx = max(0, idx - 2)  # Minimum of double the 0s before each 1\n",
+        "        while start_idx > 0 and labels[start_idx - 1] == 0:\n",
+        "            start_idx -= 1\n",
+        "        retained_indices.update(range(start_idx, idx + 1))  # Add indices to the set"
+      ],
+      "metadata": {
+        "id": "sEyjTiGlWmUd"
+      },
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "# Function to preprocess raw EEG data into epochs\n",
+        "def preprocess_raw_data(file_path, annotations, epoch_length=1):\n",
+        "    # Load raw EEG data\n",
+        "    raw = mne.io.read_raw_edf(file_path, preload=True)\n",
+        "    sampling_rate = int(raw.info['sfreq'])  # Sampling rate (e.g., 256 Hz for MIT-CHB)\n",
+        "    samples_per_epoch = epoch_length * sampling_rate\n",
+        "\n",
+        "    # Get EEG data as a numpy array\n",
+        "    data, times = raw[:]\n",
+        "    num_channels, num_samples = data.shape\n",
+        "\n",
+        "    # Create epochs\n",
+        "    epochs = []\n",
+        "    for start in range(0, num_samples, samples_per_epoch):\n",
+        "        end = start + samples_per_epoch\n",
+        "        if end > num_samples:  # Ensure the last epoch is full\n",
+        "            break\n",
+        "        epoch_data = data[:, start:end]  # Extract data for the epoch\n",
+        "        epochs.append(epoch_data)\n",
+        "\n",
+        "    # Convert to numpy array\n",
+        "    epochs = np.array(epochs)\n",
+        "\n",
+        "    # Create labels from annotations\n",
+        "    labels = create_labels_from_annotations(epochs, annotations, sampling_rate, epoch_length)\n",
+        "\n",
+        "    # Remove excess zeros\n",
+        "    labels, epochs = remove_excess_zeros(labels, epochs)\n",
+        "\n",
+        "    return epochs, labels"
+      ],
+      "metadata": {
+        "id": "QBx8LVGlWyvz"
+      },
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "id": "-p6R3cMADdj_"
+      },
+      "outputs": [],
+      "source": [
+        "# This function reads time in HH:MINS:SEC format and converts it into Seconds\n",
+        "# HOW DOES IT KNOW HOW TO SORT TIME ACROSS MULTIPLE DAYS OF DATA\n",
+        "def get_hr(time):\n",
+        "    hr, minute, sec = time.split(\":\")\n",
+        "    hr_int = float(hr) * 3600\n",
+        "    min_float = float(minute) * 60\n",
+        "    sec_float = float(sec)\n",
+        "    final = hr_int + min_float + sec_float\n",
+        "    return final\n",
+        "\n",
+        "# This function is used to sort the time. Is this function used?\n",
+        "#def sort_hr(hours):\n",
+        "#    return hours.sort()\n",
+        "\n",
+        "def sort_by_time(summary):\n",
+        "    file_order, file_end, count_of_files = get_file_start(summary) # already called before. Needed?\n",
+        "    new_file_order = {}\n",
+        "    hours = []\n",
+        "\n",
+        "    # This for loop gets all the file start time, converts into seconds, add to hours list\n",
+        "    for time, file in file_order.items():\n",
+        "        hour = get_hr(time)\n",
+        "        hours.append(hour)\n",
+        "        new_file_order.update({hour:file})\n",
+        "\n",
+        "    # Creates a new list called hours2 that sorts the original hours list\n",
+        "    hours2 = sorted(hours)\n",
+        "\n",
+        "    # Look at the sorted hours2 list, finds the corresponding file details and adds to sorted_list dictionary for All Files\n",
+        "    sorted_list = {}\n",
+        "    for hour in hours2:\n",
+        "        for time, file in new_file_order.items():\n",
+        "            if hour == time:\n",
+        "                sorted_list.update({hour: file})\n",
+        "\n",
+        "    # This for loop gets all the file end time, converts into seconds, add to end_times list\n",
+        "    end_times = []\n",
+        "    for val in file_end:\n",
+        "        time = get_hr(val)\n",
+        "        end_times.append(time)\n",
+        "    #print(end_times)\n",
+        "    end_times = sorted(end_times)\n",
+        "\n",
+        "    return sorted_list, end_times\n",
+        "\n",
+        "# new_file_order has all the files that are sorted by increasing file start time\n",
+        "new_file_order, file_end = sort_by_time(summary_file)\n",
+        "print (\"All Files (Sorted): \", new_file_order)\n",
+        "#print (file_end)\n",
+        "\n",
+        "# This function gets list of values from dictionary (Key: Value) pair\n",
+        "# Example new_file_order has start time (key) and file name (value), so this function will extract all the values (file names)\n",
+        "def get_value(dictionary):\n",
+        "    values = []\n",
+        "    for key, value in dictionary.items():\n",
+        "        values.append(value)\n",
+        "    return values\n",
+        "\n",
+        "# This function gets list of key from dictionary (Key: Value) pair\n",
+        "# Example new_file_order has start time (key) and file name (value), so this function will extract all the keys (start time)\n",
+        "def get_key(dictionary, val):\n",
+        "    for key, value in dictionary.items():\n",
+        "        if value == val:\n",
+        "            return key\n",
+        "\n",
+        "# New_File_Order has Time and FileName in Order. Next line will get just the FileName\n",
+        "ordered_files = get_value(new_file_order)\n",
+        "print (\"All File Names Only (Sorted)\", ordered_files)\n",
+        "\n",
+        "# This function will get file name along with folder path\n",
+        "def format_file_names(ordered_files):\n",
+        "    file_names = []\n",
+        "    for val in ordered_files:\n",
+        "        folder_name = get_folder_name(val)\n",
+        "\n",
+        "        file_names.append(\"/content/drive/Shareddrives/riajayanti/physionet.org/files/chbmit/1.0.0/\" + folder_name + \"/\" + val)\n",
+        "        #file_names.append(  folder_name + \"/\" + val)\n",
+        "    return file_names\n",
+        "\n",
+        "file_names = format_file_names(ordered_files)\n",
+        "print(\"All Files Names with Full Path (Sorted)\", file_names)\n"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "from google.colab import drive\n",
+        "drive.mount('/content/drive')"
+      ],
+      "metadata": {
+        "id": "5fU68jX7MWRj"
+      },
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "EeiX8Wwnbl9f"
+      },
+      "source": [
+        "**Sort Seizure Start/End time**\n",
+        "\n",
+        "**Method** - Go through each seizure file that is sorted by time. Then search for this file in summary file. Get the serizure start/end time for this file and add to array called \"Start\" and \"End\". This will be used later for labeling."
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "id": "Vpvfk5F05SA6"
+      },
+      "outputs": [],
+      "source": [
+        "\n",
+        "def get_seizure_start_end_times(summary_file, seizure_files):\n",
+        "\n",
+        "  #seizure_start_end_times = []\n",
+        "  start = []\n",
+        "  end = []\n",
+        "\n",
+        "  with open(summary_file, 'r') as f:\n",
+        "    lines = f.readlines()\n",
+        "\n",
+        "  # Iterate through each seizure file\n",
+        "  for seizure_file in seizure_files:\n",
+        "\n",
+        "      labels = remove_excessive_leading_zeros(labels)\n",
+        "      start_time = None\n",
+        "      end_time = None\n",
+        "      line_counter = 0\n",
+        "\n",
+        "      # Look for seizure file in summary\n",
+        "      for line in lines:\n",
+        "        line_counter += 1\n",
+        "        if 'File Name' in line and seizure_file in line:\n",
+        "          print(f\"Seizure File found: {seizure_file}\")\n",
+        "\n",
+        "          # Look for \"Seizure Start\" and \"Seizure End\" within the lines after the 'File Name' line\n",
+        "          for i in range(line_counter + 1, len(lines)):\n",
+        "            if \"Seizure\" in lines[i] and \"Start\" in lines[i] :\n",
+        "              start_time = lines[i].split()[-2].strip()\n",
+        "              start.append(start_time)\n",
+        "              #print (\"Start Time: \", start_time, lines[i])\n",
+        "\n",
+        "            if \"Seizure\" in lines[i] and \"End\" in lines[i] :\n",
+        "              end_time = lines[i].split()[-2].strip()\n",
+        "              end.append(end_time)\n",
+        "\n",
+        "            if 'File Name' in lines[i]:\n",
+        "              break  # Found both start and end, move to next seizure file\n",
+        "\n",
+        "          #if start_time and end_time:\n",
+        "            #seizure_start_end_times.append((start_time, end_time))\n",
+        "          break  # Move to next seizure file\n",
+        "\n",
+        "          start, end = get_seizure_start_end_times(summary_file, seizure_files)\n",
+        "          print(\"Seizure Start and End Times (Sorted):\", start, end)\n",
+        "\n",
+        "\n",
+        "\n",
+        "  return start, end\n",
+        "\n"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "ZJ1QVX6TGLkI"
+      },
+      "source": [
+        "**General Data Conversion Functions - Called Later**"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "id": "wgrvSSRxovTE"
+      },
+      "outputs": [],
+      "source": [
+        "# This function inputs a number and converts it to a float. Example: later start time is converted to float\n",
+        "def convert_string_to_float(array):\n",
+        "    float_array = []\n",
+        "    for val in array:\n",
+        "        float_array.append(float(val))\n",
+        "    return float_array\n",
+        "\n",
+        "# This function converts a list into a NumPy array\n",
+        "def array_to_numpy(array):\n",
+        "    return np.asarray(array)\n"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "aEyDfHGp2hDl"
+      },
+      "source": [
+        "#**Process EEG Data**"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "0CX2ziXLlZk9"
+      },
+      "source": [
+        "## **1.  Create Epoch Pickle File (All_Epochs)**"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "B0cb-arw1zyW"
+      },
+      "source": [
+        "The MNE library is a popular open-source Python package for processing and analyzing MEG (magnetoencephalography) and EEG data. It provides a high-level interface to load, preprocess, and analyze brainwave data and is especially useful for creating epochs (time-sliced segments) from continuous EEG signals.\n",
+        "\n",
+        "1.   Process each EEG File one by one.\n",
+        "2.   Reduce frequency from 256Hz to 32 Hz (less memory use)\n",
+        "3.   Decide which channels to keep\n",
+        "4.   Extract EEG Data from file using MNE\n",
+        "     - Extract Epoch from EDF file such that each Epoch is 20 seconds\n",
+        "     - Overlap of 4 seconds between each Epochs\n",
+        "5.   Combine all epoch's one by one such that there is one epoch file in folder.\n"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "id": "IQTBfqxt8-Gl"
+      },
+      "outputs": [],
+      "source": [
+        "# Save \"data\" in \"filename.pkl\" file which is \"intermediate_data\" folder. This can be any pickle file - epoch, label, chunks, etc.\n",
+        "def save_intermediate_data(data, filename):\n",
+        "    \"\"\"Save intermediate processing results\"\"\"\n",
+        "    os.makedirs('intermediate_data', exist_ok=True)\n",
+        "    with open(f'intermediate_data/{filename}.pkl', 'wb') as f:\n",
+        "        pickle.dump(data, f)\n",
+        "\n",
+        "# Load pickle file into memory for usage\n",
+        "def load_intermediate_data(filename):\n",
+        "    \"\"\"Load intermediate processing results\"\"\"\n",
+        "    with open(f'intermediate_data/{filename}.pkl', 'rb') as f:\n",
+        "        return pickle.load(f)\n",
+        "\n",
+        "# Processes individual files inside main folder. Example chb06 has 18 such files\n",
+        "def process_single_file(filename, file_index, save_intermediate=True):\n",
+        "    \"\"\"Process a single EEG file with intermediate saving\"\"\"\n",
+        "    try:\n",
+        "        print(f\"\\nProcessing file {file_index}: {filename}\")\n",
+        "\n",
+        "        # Load and preprocess\n",
+        "        data = mne.io.read_raw_edf(filename, preload=True)\n",
+        "        data.resample(64)  # Downsample to 64 Hz\n",
+        "\n",
+        "        # Select channels\n",
+        "        channels_to_keep = ['FP1-F7', 'F7-T7', 'T7-P7', 'P7-O1', 'FP1-F3',\n",
+        "                          'F3-C3', 'C3-P3', 'P3-O1', 'FP2-F4', 'F4-C4']\n",
+        "        data.pick_channels(channels_to_keep)\n",
+        "\n",
+        "        mne.channels.make_1020_channel_selections(data.info)\n",
+        "        data.set_eeg_reference()\n",
+        "\n",
+        "        # Create epochs\n",
+        "        epochs = mne.make_fixed_length_epochs(data,\n",
+        "                                            duration=20,\n",
+        "                                            overlap=4,\n",
+        "                                            preload=True)\n",
+        "        epochs.drop_bad()\n",
+        "\n",
+        "        if save_intermediate:\n",
+        "            save_intermediate_data(epochs, f'epochs_{file_index}')\n",
+        "\n",
+        "        # Clean up\n",
+        "        del data\n",
+        "        del epochs # Added this from prior version\n",
+        "        gc.collect()\n",
+        "\n",
+        "        return epochs\n",
+        "\n",
+        "    except Exception as e:\n",
+        "        print(f\"Error processing file {filename}: {str(e)}\")\n",
+        "        return None\n"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "id": "oObl0bho57vT"
+      },
+      "outputs": [],
+      "source": [
+        "def combine_processed_files(num_files, chunk_size=2):\n",
+        "    \"\"\"Combine processed files with chunking to manage memory\"\"\"\n",
+        "    try:\n",
+        "        num_chunks = (num_files + chunk_size - 1) // chunk_size\n",
+        "\n",
+        "        for chunk in range(num_chunks):\n",
+        "            print(f\"\\nProcessing chunk {chunk + 1}/{num_chunks}\")\n",
+        "            start_idx = chunk * chunk_size\n",
+        "            end_idx = min(start_idx + chunk_size, num_files)\n",
+        "\n",
+        "            # Load first file in chunk\n",
+        "            combined = load_intermediate_data(f'epochs_{start_idx}')\n",
+        "\n",
+        "            # Combine with second chunk file if available\n",
+        "            for i in range(start_idx + 1, end_idx):\n",
+        "                next_epochs = load_intermediate_data(f'epochs_{i}')\n",
+        "                combined = mne.concatenate_epochs([combined, next_epochs])\n",
+        "                del next_epochs\n",
+        "                gc.collect()\n",
+        "\n",
+        "            # Save chunk result\n",
+        "            save_intermediate_data(combined, f'chunk_{chunk}')\n",
+        "            del combined\n",
+        "            gc.collect()\n",
+        "\n",
+        "        # Final combination\n",
+        "        print(\"\\nPerforming final combination...\")\n",
+        "        result = load_intermediate_data('chunk_0')\n",
+        "\n",
+        "        for chunk in range(1, num_chunks):\n",
+        "            next_chunk = load_intermediate_data(f'chunk_{chunk}')\n",
+        "            result = mne.concatenate_epochs([result, next_chunk])\n",
+        "            del next_chunk\n",
+        "            gc.collect()\n",
+        "\n",
+        "        save_intermediate_data(result, 'final_epochs_15')\n",
+        "        return result\n",
+        "\n",
+        "    except Exception as e:\n",
+        "        print(f\"Error combining files: {str(e)}\")\n",
+        "        return None\n",
+        "\n"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "id": "ZJXYMTiGH3t1"
+      },
+      "outputs": [],
+      "source": [
+        "def prepare_for_classification(epochs):\n",
+        "    \"\"\"Convert epochs to 2D array for classification\"\"\"\n",
+        "    data = epochs.get_data()\n",
+        "    dim1, dim2, dim3 = data.shape\n",
+        "    return np.reshape(data, (dim1, dim2 * dim3))"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "id": "EQ_QbfIk62Gb"
+      },
+      "outputs": [],
+      "source": [
+        "def main_pipeline(file_names):\n",
+        "    \"\"\"Main processing pipeline with intermediate saving\"\"\"\n",
+        "    # Create directory for intermediate results\n",
+        "    os.makedirs('intermediate_data', exist_ok=True)\n",
+        "\n",
+        "    try:\n",
+        "        # Process each file\n",
+        "        for idx, filename in enumerate(file_names):\n",
+        "            process_single_file(filename, idx)\n",
+        "\n",
+        "        # Combine processed files\n",
+        "        final_epochs_15 = combine_processed_files(len(file_names))\n",
+        "\n",
+        "        if final_epochs_15 is not None:\n",
+        "            # Prepare for classification\n",
+        "            # x_data = prepare_for_classification(final_epochs)\n",
+        "            # save_intermediate_data(x_data, 'processed_features')\n",
+        "\n",
+        "            print(\"Processing complete! Results saved in intermediate_data/\")\n",
+        "\n",
+        "            # COMMENTED ABOVE 3 LINES. Don't want to convert to 2D NUMPY array yet as set montage, drop channel etc works on array\n",
+        "            # return x_data\n",
+        "            return final_epochs_15\n",
+        "        else:\n",
+        "            print(\"Failed to process files\")\n",
+        "            return None\n",
+        "\n",
+        "    except Exception as e:\n",
+        "        print(f\"Error in main pipeline: {str(e)}\")\n",
+        "        return None\n",
+        "    finally:\n",
+        "        # Optional: Clean up temporary files\n",
+        "        # shutil.rmtree('intermediate_data')\n",
+        "        pass"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "id": "WobWo4lNOCIg",
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "outputId": "aee65461-1b42-41db-fa22-475963177ac1"
+      },
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "File exists.\n"
+          ]
+        }
+      ],
+      "source": [
+        "import os\n",
+        "file_path = '/content/drive/Shareddrives/riajayanti/physionet.org/files/chbmit/1.0.0/chb01/chb01_01.edf'\n",
+        "if os.path.exists(file_path):\n",
+        "    print(\"File exists.\")\n",
+        "else:\n",
+        "    print(\"File does not exist.\")\n"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "id": "6BUsZYLy7tgr"
+      },
+      "outputs": [],
+      "source": [
+        "# Run processing pipeline - This creates the final_epochs file\n",
+        "# print (file_names)\n",
+        "processed_data = main_pipeline(file_names)"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "id": "_Ol2ODCKmy14"
+      },
+      "outputs": [],
+      "source": [
+        "all_epochs = processed_data\n",
+        "print(all_epochs.info)\n",
+        "# print(all_epochs.shape)\n"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "3GMKQY7UlZk_"
+      },
+      "source": [
+        "##**2.   Make EEG Montage, Plot Electrode Map, Rename / Drop Channels**\n",
+        "\n"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "TJFYc0dMrp2R"
+      },
+      "source": [
+        "**Montage** - Placement of electrodes on scalp.  The 10-20 is a widely used montage for clinical and research EEG that uses 21 electrodes placed based on the distance between anatomical landmarks on the head, like the nasion (bridge of the nose) and inion (back of the head)."
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "id": "tsLqBqT_lZk_"
+      },
+      "outputs": [],
+      "source": [
+        "montage =  mne.channels.make_standard_montage('standard_1020')"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "ZW-WvklelZk_"
+      },
+      "source": [
+        "**Rename Channels**"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "id": "593StDr279sG"
+      },
+      "outputs": [],
+      "source": [
+        "all_epochs.info[\"ch_names\"]\n",
+        "\n",
+        "new_channels = ['FP1', 'F7', 'T7', 'P7', 'F3', 'C3', 'P3', 'O1', 'FP2', 'F4']\n",
+        "channels = ['FP1-F7', 'F7-T7', 'T7-P7', 'P7-O1', 'FP1-F3', 'F3-C3', 'C3-P3', 'P3-O1', 'FP2-F4', 'F4-C4']\n",
+        "\n",
+        "#new_channels = ['FP1', 'F7', 'T7', 'P7', 'F3', 'C3', 'P3', 'O1', 'FP2', 'F4', 'C4', 'P4', 'F8', 'T8', 'PO8', 'O2', 'FZ', 'CZ', 'FT9', 'FT10']\n",
+        "#channels = ['FP1-F7', 'F7-T7', 'T7-P7', 'P7-O1', 'FP1-F3', 'F3-C3', 'C3-P3', 'P3-O1', 'FP2-F4', 'F4-C4', 'C4-P4', 'P4-O2', 'FP2-F8', 'F8-T8', 'T8-P8-0', 'P8-O2', 'FZ-CZ', 'CZ-PZ', 'T7-FT9', 'FT9-FT10']\n",
+        "\n",
+        "mapping = {}\n",
+        "for i in range(len(channels)):\n",
+        "    mapping.update({channels[i]: new_channels[i]})\n",
+        "\n",
+        "mne.rename_channels(all_epochs.info, mapping)\n",
+        "all_epochs.info[\"ch_names\"]\n"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "qjdkyZrclZlA"
+      },
+      "source": [
+        "**Drop Channels**\n",
+        "*   Drop channels that don't fit into the montage generated by mne\n",
+        "*   data.drop_channels(['FP1', 'FP2', 'FZ', 'CZ', 'FT10-T8', 'T8-P8-1', 'P7-T7', '.-0', '.-1', '.-2', '.-3', '.-4'])"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "id": "RejCxlBjlZlA"
+      },
+      "outputs": [],
+      "source": [
+        "all_epochs.drop_channels(['FP1', 'FP2'])\n",
+        "#all_epochs.drop_channels(['FP1', 'FP2', 'FZ', 'CZ', 'FT10-T8', 'T8-P8-1', 'P7-T7', 'PZ-OZ', '--5', 'FC1-Ref', 'FC2-Ref', 'FC5-Ref', 'FC6-Ref', 'CP1-Ref', 'CP2-Ref', 'CP5-Ref', 'CP6-Ref'])\n"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "id": "Qa8gdhkLlZlB"
+      },
+      "outputs": [],
+      "source": [
+        "all_epochs.set_montage(montage) #THIS CODE GIVES AN ERROR WHEN FP1 AND FP2 CHANNELS ARE PRESENT"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "id": "kDfwHhYblZlB"
+      },
+      "outputs": [],
+      "source": [
+        "all_epochs= all_epochs.load_data()\n"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "3pIJSNVjraL2"
+      },
+      "source": [
+        "**Plot Topomap** - Helps to provide an intuitive representation of brain activity and identify which areas of the brain show significant patterns. This function generates a 2D map where the color gradient indicates the values from epochs across each electrode position."
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "id": "LBGITjV5lZk_"
+      },
+      "outputs": [],
+      "source": [
+        "def make_topography_images(epochs, pos):\n",
+        "    mne.viz.plot_topomap(epochs, pos)"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "Je2GBU-QlZlB"
+      },
+      "source": [
+        "#**Signal Decomposition and Noise Reduction**"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "QYOYu5r4lZlH"
+      },
+      "source": [
+        "##**1. ICA on Epochs**\n",
+        "\n",
+        "ICA (Independent Component Analysis) for epochs in EEG analysis is a method used to isolate and remove noise, artifacts, or unwanted signals from EEG data, especially those due to eye movements, muscle activity, or other external interferences. When used in the context of epochs (time segments of EEG data, often corresponding to specific events or stimuli), ICA helps improve the signal quality for each epoch by isolating components of the data that represent true brain activity from those that are artifacts."
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "id": "2Ybvx6PrlZlH"
+      },
+      "outputs": [],
+      "source": [
+        "def ica_on_epochs(epochs):\n",
+        "    ica = mne.preprocessing.ICA(n_components = 8, random_state = 97, max_iter = 800) # changed to 8 as we only have 8 channels\n",
+        "    ica.fit(epochs)\n",
+        "    epochs = ica.apply(epochs)\n",
+        "    ica.plot_properties(epochs)\n",
+        "    return epochs"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "id": "RApBHLOblZlI"
+      },
+      "outputs": [],
+      "source": [
+        "#epochs = ica_on_epochs(epochs)\n",
+        "epochs = ica_on_epochs(all_epochs)"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "6t29cEFIlZlI"
+      },
+      "source": [
+        "## **2. Noise Covariance**"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "id": "Erj81MmPlZlI"
+      },
+      "outputs": [],
+      "source": [
+        "#def get_noise_covariance(epochs):\n",
+        "#    noise_covariance = mne.compute_covariance(epochs)\n",
+        "#    noise_covariance.plot(epochs.info)"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "id": "m6yMkvMElZlI"
+      },
+      "outputs": [],
+      "source": [
+        "noise_covariance = mne.compute_covariance(epochs)\n",
+        "noise_covariance.plot(epochs.info)"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "id": "0MUS9ToLlZlJ"
+      },
+      "outputs": [],
+      "source": [
+        "#get_noise_covariance(epochs)"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "v8pnxG00lZlJ"
+      },
+      "source": [
+        "##**3. Making Projections using SSP Algorithm**\n",
+        "SSP (Signal Space Projection) algorithms are a set of techniques used primarily in EEG and MEG data analysis to identify and remove artifacts or unwanted noise from brain signals. They work by projecting signal components associated with specific artifacts (like eye blinks or muscle movements) into a separate subspace, allowing those components to be removed from the original data."
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "id": "iY8llPZxlZlK"
+      },
+      "outputs": [],
+      "source": [
+        "# The code below returns a list of Projection Vectors\n",
+        "projections = mne.compute_proj_epochs(epochs)\n",
+        "\n",
+        "# Adding Projections to Epochs Object\n",
+        "epochs.add_proj(projections)"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "id": "a0_g2X7FlZlK"
+      },
+      "outputs": [],
+      "source": [
+        "# Plotting the Projections\n",
+        "noise_covariance.plot(epochs.info, proj = True)"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "id": "1WggzoABlZlL"
+      },
+      "outputs": [],
+      "source": [
+        "# Plot Epochs Image and show ERP\n",
+        "epochs.plot_image()"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "id": "3fCW3i-WlZlL"
+      },
+      "outputs": [],
+      "source": [
+        "# Plot the sensor locations\n",
+        "epochs.plot_sensors()"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "elqnKVUglZlL"
+      },
+      "source": [
+        "# **Label Epoch (1 - Seizure, 0 - No Seizure)**\n",
+        "\n",
+        "*   **Method**:\n",
+        "     -  Go through each file one by one\n",
+        "     -  Assume start of file to be 0th second.\n",
+        "     -  Go forward in increments of 20 seconds and see if this falls within the seizure start/end time for that file. If it does label as 1, else 0\n",
+        "\n"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "id": "qiya2AAwlZlM"
+      },
+      "outputs": [],
+      "source": [
+        "def get_seizure_time(summary, seizure_files):\n",
+        "     start = []\n",
+        "     end = []\n",
+        "     summary = open(summary, \"r\")\n",
+        "     for line in summary:\n",
+        "         words = line.split(\" \")\n",
+        "         if \"Seizure\" in line and \"Start\" in line:\n",
+        "            start.append(words[len(words) - 2])\n",
+        "         elif \"Seizure\" in line and \"End\" in line:\n",
+        "             end.append(words[len(words) - 2])\n",
+        "     return start, end\n",
+        "start, end = get_seizure_time(summary_file, seizure_files)\n",
+        "\n",
+        "#Start and End Values are strings, so convert to float\n",
+        "\n",
+        "start = convert_string_to_float(start)\n",
+        "end = convert_string_to_float(end)\n",
+        "print (\"Seizure Start/End Time Sorted\", start, end)"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "3vW_4VPglZlN"
+      },
+      "source": [
+        "**Label epochs based on Seizure Start /End time**"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "id": "LUqI71nIlZlN"
+      },
+      "outputs": [],
+      "source": [
+        "def get_label(time_count, seizure_starts, seizure_ends):\n",
+        "    label = 0\n",
+        "    count = 0\n",
+        "    #print (len(seizure_starts))\n",
+        "    for index in range(len(seizure_starts)):\n",
+        "        if (time_count >= int(seizure_starts[index]) and time_count <= int(seizure_ends[index])):\n",
+        "            label = 1\n",
+        "            print (time_count, seizure_starts[index], seizure_ends[index])\n",
+        "            #count = count + 1\n",
+        "    #print (count)\n",
+        "    return label\n",
+        "\n",
+        "def get_epoch_labels(epochs, seizure_start_time, seizure_end_time):\n",
+        "    #seizure time occurs in the total file time\n",
+        "    labels = []\n",
+        "    time_count = 0\n",
+        "    for epoch in epochs:\n",
+        "        labels.append(get_label(time_count, seizure_start_time, seizure_end_time))\n",
+        "        #time_count += 5\n",
+        "        time_count += 20\n",
+        "    return labels\n",
+        "\n",
+        "epochs_array = load_intermediate_data(\"final_epochs_15\")\n",
+        "\n",
+        "epochs_labels = get_epoch_labels(epochs_array, start, end)\n",
+        "epochs_labels = array_to_numpy(epochs_labels)\n",
+        "epochs_labels.shape\n",
+        "\n",
+        "save_intermediate_data(epochs_labels, 'final_labels_15')\n"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "LQpB2Tv3X_c4"
+      },
+      "source": [
+        "**Function that indicates seizure in label file**"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "id": "1PY7ZAABlZlO"
+      },
+      "outputs": [],
+      "source": [
+        "def check_for_seizure(labels):\n",
+        "    for label in labels:\n",
+        "        if label == 1:\n",
+        "            return True\n",
+        "    return False"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "id": "XbzFZ7vDkLY9"
+      },
+      "outputs": [],
+      "source": [
+        "# Statistics to evaluate how many times we should replicate\n",
+        "print(\"Length of Original Epoch\", len(epochs_array))\n",
+        "\n",
+        "labels = load_intermediate_data(\"final_labels_15\")\n",
+        "\n",
+        "#COUNTER\n",
+        "\n",
+        "from collections import Counter\n",
+        "Counter(labels)\n"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "id": "15yJ6BR7lnaI"
+      },
+      "outputs": [],
+      "source": [
+        "def replicate_seizure_epochs(epochs_array, labels):\n",
+        "\n",
+        "    # Find the indices where the label is 1\n",
+        "    indices_label_1 = np.where(labels == 1)[0]\n",
+        "    #print (indices_label_1)\n",
+        "\n",
+        "    # Replicate the epochs with label 1\n",
+        "    replicated_epochs = epochs_array[indices_label_1]\n",
+        "    # Reshape replicated_epochs to match the dimensions of epochs_array\n",
+        "    replicated_epochs = replicated_epochs[:, np.newaxis, :] # Add a new axis to make it 3D\n",
+        "\n",
+        "    # Create a new array with the original epochs and the replicated epochs\n",
+        "    new_epochs_array = np.concatenate((epochs_array, replicated_epochs), axis=0) # Specify axis for concatenation\n",
+        "\n",
+        "    # Create a new label array with the original labels and the replicated labels\n",
+        "    new_labels = np.concatenate((labels, np.ones_like(labels[indices_label_1])))\n",
+        "\n",
+        "    # Print the number of labels with value 1 in the new label array\n",
+        "    print(Counter(new_labels))\n",
+        "    print(len(new_epochs_array))\n",
+        "\n",
+        "    return new_epochs_array, new_labels"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "id": "5n4fHCa5ry_q"
+      },
+      "outputs": [],
+      "source": [
+        "save_intermediate_data(epochs_array, 'Replicated_epoch_15')\n",
+        "save_intermediate_data(labels, 'Replicated_label_15')\n",
+        "\n",
+        "epochs_array = load_intermediate_data(\"Replicated_epoch_15\")\n",
+        "labels = load_intermediate_data(\"Replicated_label_15\")"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "# Alternative: Balancing Technique"
+      ],
+      "metadata": {
+        "id": "cHaH61LgGQdC"
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "from imblearn.over_sampling import SMOTE\n",
+        "from collections import Counter\n",
+        "\n",
+        "def balance_seizure_data(epochs_array, labels):\n",
+        "    \"\"\"\n",
+        "    Balance seizure/non-seizure data using SMOTE\n",
+        "\n",
+        "    Args:\n",
+        "        epochs_array: 3D array of shape (n_epochs, n_channels, n_timepoints)\n",
+        "        labels: Binary labels array\n",
+        "    \"\"\"\n",
+        "    # Reshape 3D data to 2D for SMOTE\n",
+        "    # Get the underlying NumPy array from epochs_array\n",
+        "    epochs_data = epochs_array.get_data()\n",
+        "\n",
+        "    # Access the shape from the underlying data\n",
+        "    n_epochs, n_channels, n_timepoints = epochs_data.shape\n",
+        "    X_reshaped = epochs_data.reshape(n_epochs, n_channels * n_timepoints)\n",
+        "\n",
+        "    # Apply SMOTE\n",
+        "    smote = SMOTE(sampling_strategy=0.5)  # Adjust ratio as needed\n",
+        "    X_balanced, y_balanced = smote.fit_resample(X_reshaped, labels)\n",
+        "\n",
+        "    # Reshape back to 3D\n",
+        "    X_balanced_3d = X_balanced.reshape(-1, n_channels, n_timepoints)\n",
+        "\n",
+        "    print(\"Original class distribution:\", Counter(labels))\n",
+        "    print(\"Balanced class distribution:\", Counter(y_balanced))\n",
+        "\n",
+        "    return X_balanced_3d, y_balanced # Return the NumPy array"
+      ],
+      "metadata": {
+        "id": "WSHIM_r6GXo3"
+      },
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "from imblearn.combine import SMOTETomek\n",
+        "from collections import Counter\n",
+        "\n",
+        "def hybrid_balance_seizure_data(epochs_array, labels):\n",
+        "    \"\"\"\n",
+        "    Balance seizure/non-seizure data using combined over/undersampling\n",
+        "\n",
+        "    Args:\n",
+        "        epochs_array: 3D array of shape (n_epochs, n_channels, n_timepoints)\n",
+        "        labels: Binary labels array\n",
+        "    \"\"\"\n",
+        "    # Reshape 3D data to 2D\n",
+        "    n_epochs, n_channels, n_timepoints = epochs_array.shape\n",
+        "    X_reshaped = epochs_array.reshape(n_epochs, n_channels * n_timepoints)\n",
+        "\n",
+        "    # Apply SMOTETomek\n",
+        "    smt = SMOTETomek(sampling_strategy='auto')\n",
+        "    X_balanced, y_balanced = smt.fit_resample(X_reshaped, labels)\n",
+        "\n",
+        "    # Reshape back to 3D\n",
+        "    X_balanced_3d = X_balanced.reshape(-1, n_channels, n_timepoints)\n",
+        "\n",
+        "    print(\"Original class distribution:\", Counter(labels))\n",
+        "    print(\"Balanced class distribution:\", Counter(y_balanced))\n",
+        "\n",
+        "    return X_balanced_3d, y_balanced\n",
+        "\n",
+        "def validate_balanced_data(X_balanced, y_balanced):\n",
+        "    \"\"\"Validate balanced dataset\"\"\"\n",
+        "    # Check for NaN/infinite values\n",
+        "    if np.any(np.isnan(X_balanced)) or np.any(np.isinf(X_balanced)):\n",
+        "        raise ValueError(\"Dataset contains NaN or infinite values\")\n",
+        "\n",
+        "    # Verify class balance\n",
+        "    class_counts = Counter(y_balanced)\n",
+        "    ratio = min(class_counts.values()) / max(class_counts.values())\n",
+        "    if ratio < 0.4:  # Can adjust threshold\n",
+        "        print(\"Warning: Classes still significantly imbalanced\")"
+      ],
+      "metadata": {
+        "id": "l3iZRFywGQMx"
+      },
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "epochs_array, labels = balance_seizure_data(epochs_array, labels)"
+      ],
+      "metadata": {
+        "id": "MjhWm0_PGlOA"
+      },
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "Bp2vZ9Xw58hC"
+      },
+      "source": [
+        "#**Using SPoC**\n",
+        "In machine learning, SPoC refers to \"Sparse Coding\" or sometimes \"Sparse Polynomial Coding\" depending on the context. Sparse coding is a technique used to represent data in a way that highlights essential features while reducing noise. It achieves this by encoding data in a sparse (mostly zero or minimal non-zero) representation, which makes it easier to process and analyze while retaining key information."
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "id": "YM5ytvIxlZlP"
+      },
+      "outputs": [],
+      "source": [
+        "!pip install mne\n",
+        "\n",
+        "import mne\n",
+        "import numpy as np\n",
+        "from collections import Counter\n",
+        "\n",
+        "def spoc(epochs_array, epochs_labels, num_comp):\n",
+        "    \"\"\"\n",
+        "    Applies SPoC spatial filtering to epochs data.\n",
+        "\n",
+        "    Args:\n",
+        "        epochs_array (mne.EpochsArray): Epochs data.\n",
+        "        epochs_labels (array-like): Epoch labels.\n",
+        "        num_comp (int): Number of spatial components to extract.\n",
+        "\n",
+        "    Returns:\n",
+        "        numpy.ndarray: SPoC-filtered epochs data.\n",
+        "    \"\"\"\n",
+        "    # Get the underlying data as a NumPy array\n",
+        "    epochs_data = epochs_array.get_data()\n",
+        "\n",
+        "    # Convert the data to float64\n",
+        "    epochs_data = epochs_data.astype(np.float64)\n",
+        "\n",
+        "    spoc = mne.decoding.SPoC(num_comp, reg='ledoit_wolf')\n",
+        "\n",
+        "    try:\n",
+        "        spoc_epochs = spoc.fit_transform(epochs_data, epochs_labels)\n",
+        "    except np.linalg.LinAlgError as e:\n",
+        "        print(f\"LinAlgError encountered: {e}\")\n",
+        "        print(\"Possible causes:\")\n",
+        "        print(\"- Insufficient data for reliable covariance estimation\")\n",
+        "        print(\"- High correlation or collinearity between channels\")\n",
+        "        print(\"- Incorrect epoch dimensions or data type\")\n",
+        "        print(\"Consider increasing the number of epochs or reducing channels,\")\n",
+        "        print(\"or try a different regularization method like 'oas'.\")\n",
+        "        return None\n",
+        "    return spoc_epochs"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "id": "QjdgeArzlZlP"
+      },
+      "outputs": [],
+      "source": [
+        "def make_graph(epochs):\n",
+        "    #getting the three channels\n",
+        "\n",
+        "    epochs.plot(scalings = \"auto\")\n",
+        "\n",
+        "make_graph(epochs)"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "8uozqK7glZlP"
+      },
+      "source": [
+        "**Plotting epochs**"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "id": "cnDfWkxulZlP"
+      },
+      "outputs": [],
+      "source": [
+        "epochs.plot_psd(fmin=0.2, fmax = 32., average=True) # changed fmax from 40 to 32 as frequency is 32 Hz now"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "iamwkzB9lZlQ"
+      },
+      "source": [
+        "**Epochs topomap**"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "id": "xE8m5gvplZlQ"
+      },
+      "outputs": [],
+      "source": [
+        "epochs.plot_psd_topomap()"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "l4ys89rmlZlQ"
+      },
+      "source": [
+        "##**Convert to 2D array (Most algorithms need this)**"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "id": "q6Dcs59flZlQ"
+      },
+      "outputs": [],
+      "source": [
+        "def make_2d(array):\n",
+        "    # Adding code to fix an error - EpochsArray' object has no attribute 'shape\n",
+        "\n",
+        "    # Check if the input is an mne.EpochsArray\n",
+        "    # If it is, extract the underlying data. If not then, it will run the except block\n",
+        "    try:\n",
+        "        data = array.get_data()\n",
+        "    except AttributeError:\n",
+        "        data = array  # If not an EpochsArray, assume it's already a NumPy array\n",
+        "\n",
+        "    dim1, dim2, dim3 = data.shape # Access the shape of the data\n",
+        "    array = np.reshape(data, (dim1, dim2 * dim3))\n",
+        "\n",
+        "    #array = np.reshape(array, (dim1, dim2 * dim3))\n",
+        "    return array\n"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "id": "dLHzJG2AlZlQ"
+      },
+      "outputs": [],
+      "source": [
+        "Epochs_2D_Array = make_2d(epochs_array)"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "id": "LLEpaD_JvwOY"
+      },
+      "outputs": [],
+      "source": [
+        "# @title Counter\n",
+        "Counter(labels)"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "6pSafyYR1-dE"
+      },
+      "source": [
+        "# **Seizure Detection Models**"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "Vo3Y1o34lZlR"
+      },
+      "source": [
+        "##**1.  K-Nearest Neighbors**"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "id": "izW6fvP3ZoOp"
+      },
+      "outputs": [],
+      "source": [
+        "from sklearn.model_selection import train_test_split, cross_val_score\n",
+        "from sklearn.neighbors import KNeighborsClassifier\n",
+        "from sklearn.metrics import accuracy_score\n",
+        "from sklearn.metrics import recall_score\n",
+        "\n",
+        "from sklearn import metrics # or from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay\n",
+        "\n",
+        "\n",
+        "def sklearn_knn(x_data, y_data, num_neighbors):\n",
+        "    # Split the data into train and test sets with random sampling\n",
+        "    x_train, x_test, y_train, y_test = train_test_split(x_data, y_data, test_size=0.8, random_state=22)\n",
+        "    model = KNeighborsClassifier(n_neighbors=num_neighbors, weights='distance')\n",
+        "    model.fit(x_train, y_train)\n",
+        "    # Use cross-validation for additional validation on training data\n",
+        "    cross_val_scores = cross_val_score(model, x_train, y_train, cv=5)\n",
+        "    print(\"Cross-Validation Accuracy: \", np.mean(cross_val_scores))\n",
+        "\n",
+        "    y_preds = model.predict(x_test)\n",
+        "    accuracy = accuracy_score(y_test, y_preds)\n",
+        "    recall = recall_score(y_test, y_preds)  # Calculate recall\n",
+        "\n",
+        "    confusion_matrix = metrics.confusion_matrix(y_test, y_preds)\n",
+        "\n",
+        "    cm_display = metrics.ConfusionMatrixDisplay(confusion_matrix = confusion_matrix, display_labels = [0, 1])\n",
+        "\n",
+        "    cm_display.plot()\n",
+        "    plt.show()\n",
+        "    return accuracy, recall\n",
+        "\n",
+        "\n"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "id": "WUnNua1ZZnkz"
+      },
+      "outputs": [],
+      "source": [
+        "score, recall = sklearn_knn(Epochs_2D_Array, labels, 2)\n",
+        "print(\"Test Accuracy: \", score)\n",
+        "print(\"Test Recall: \", recall)\n",
+        "\n",
+        "\n",
+        "\n",
+        "\n",
+        "\n",
+        "\n",
+        "\n",
+        "#True Negative (Top-Left Quadrant)\n",
+        "#False Positive (Top-Right Quadrant)\n",
+        "#False Negative (Bottom-Left Quadrant)\n",
+        "#True Positive (Bottom-Right Quadrant)"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "-qZhdCDeg8rp"
+      },
+      "source": [
+        "## **2. Logistic Regression**"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "id": "fiGJsRCOg8YB"
+      },
+      "outputs": [],
+      "source": [
+        "from sklearn.linear_model import LogisticRegression\n",
+        "\n",
+        "def logistic_regression(x_data, y_data):\n",
+        "    x_train, x_test, y_train, y_test = train_test_split(x_data, y_data, test_size=0.2, random_state=42)\n",
+        "    model = LogisticRegression(class_weight='balanced', max_iter=1000)\n",
+        "    model.fit(x_train, y_train)\n",
+        "    print(\"Cross-Validation Accuracy: \", np.mean(cross_val_score(model, x_train, y_train, cv=5)))\n",
+        "\n",
+        "    y_preds = model.predict(x_test)\n",
+        "    accuracy = accuracy_score(y_test, y_preds)\n",
+        "    recall = recall_score(y_test, y_preds)\n",
+        "    return accuracy, recall"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "id": "7Nz2SdsEhpWF"
+      },
+      "outputs": [],
+      "source": [
+        "import numpy as np\n",
+        "from sklearn.model_selection import train_test_split, cross_val_score\n",
+        "from sklearn.linear_model import LogisticRegression\n",
+        "from sklearn.metrics import accuracy_score, recall_score\n",
+        "\n",
+        "def logistic_regression(x_data, y_data):\n",
+        "    # Check if y_data has at least 2 unique classes\n",
+        "    unique_classes = np.unique(y_data)\n",
+        "    if len(unique_classes) < 2:\n",
+        "        raise ValueError(\"Target variable 'y_data' must have at least 2 unique classes for Logistic Regression.\")\n",
+        "\n",
+        "    # Split data into training and test sets\n",
+        "    x_train, x_test, y_train, y_test = train_test_split(x_data, y_data, test_size=0.2, random_state=42, stratify=y_data)\n",
+        "\n",
+        "    # Initialize and train the model\n",
+        "    model = LogisticRegression(class_weight='balanced', max_iter=1000)\n",
+        "    model.fit(x_train, y_train)\n",
+        "\n",
+        "    # Cross-validation scores\n",
+        "    cross_val_scores = cross_val_score(model, x_train, y_train, cv=5)\n",
+        "    print(\"Cross-Validation Accuracy: \", np.mean(cross_val_scores))\n",
+        "\n",
+        "    # Make predictions and calculate accuracy and recall\n",
+        "    y_preds = model.predict(x_test)\n",
+        "    accuracy = accuracy_score(y_test, y_preds)\n",
+        "    recall = recall_score(y_test, y_preds)\n",
+        "\n",
+        "    # Print results before returning\n",
+        "    print(\"Test Accuracy: \", accuracy)\n",
+        "    print(\"Test Recall: \", recall)\n",
+        "\n",
+        "    confusion_matrix = metrics.confusion_matrix(y_test, y_preds)\n",
+        "\n",
+        "    cm_display = metrics.ConfusionMatrixDisplay(confusion_matrix = confusion_matrix, display_labels = [0, 1])\n",
+        "\n",
+        "    cm_display.plot()\n",
+        "    plt.show()\n",
+        "\n",
+        "    return accuracy, recall\n",
+        "\n",
+        "score, recall = logistic_regression(Epochs_2D_Array, labels)\n",
+        "\n",
+        "import matplotlib.pyplot as plt\n",
+        "import numpy\n",
+        "from sklearn import metrics\n",
+        "\n",
+        "\n",
+        "\n"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "I60bMXwrh7cO"
+      },
+      "source": [
+        "## **3. Random Forest Classifer**"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "id": "IETB7qI-h7Iu"
+      },
+      "outputs": [],
+      "source": [
+        "# Takes 6 minutes to run\n",
+        "from sklearn.ensemble import RandomForestClassifier\n",
+        "\n",
+        "def random_forest(x_data, y_data, n_trees):\n",
+        "    x_train, x_test, y_train, y_test = train_test_split(x_data, y_data, test_size=0.2, random_state=42)\n",
+        "    model = RandomForestClassifier(n_estimators=n_trees, class_weight='balanced', random_state=42)\n",
+        "    model.fit(x_train, y_train)\n",
+        "\n",
+        "    cross_val_scores = cross_val_score(model, x_train, y_train, cv=5)\n",
+        "    print(\"Cross-Validation Accuracy: \", np.mean(cross_val_scores))\n",
+        "\n",
+        "    y_preds = model.predict(x_test)\n",
+        "    accuracy = accuracy_score(y_test, y_preds)\n",
+        "    recall = recall_score(y_test, y_preds)\n",
+        "\n",
+        "    confusion_matrix = metrics.confusion_matrix(y_test, y_preds)\n",
+        "\n",
+        "    cm_display = metrics.ConfusionMatrixDisplay(confusion_matrix = confusion_matrix, display_labels = [0, 1])\n",
+        "\n",
+        "    cm_display.plot()\n",
+        "    plt.show()\n",
+        "\n",
+        "    return accuracy, recall\n"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "id": "8DZYEe9Rh6gd"
+      },
+      "outputs": [],
+      "source": [
+        "score, recall = random_forest(Epochs_2D_Array, labels, 100)\n",
+        "print(\"Test Accuracy: \", score)\n",
+        "print(\"Test Recall: \", recall)\n",
+        "\n",
+        "import matplotlib.pyplot as plt\n",
+        "import numpy\n",
+        "from sklearn import metrics\n",
+        "\n"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "orNIDyI4iuHV"
+      },
+      "source": [
+        "## **4. SVM (Support Vector Machine) Classifer**"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "id": "upfGTCXJiz4a"
+      },
+      "outputs": [],
+      "source": [
+        "# Takes 17 minutes to run\n",
+        "from sklearn.svm import SVC\n",
+        "\n",
+        "def svm_classifier(x_data, y_data, kernel):\n",
+        "    x_train, x_test, y_train, y_test = train_test_split(x_data, y_data, test_size=0.2, random_state=42)\n",
+        "    model = SVC(kernel=kernel, class_weight='balanced', random_state=42)\n",
+        "    model.fit(x_train, y_train)\n",
+        "\n",
+        "    cross_val_scores = cross_val_score(model, x_train, y_train, cv=5)\n",
+        "    print(\"Cross-Validation Accuracy: \", np.mean(cross_val_scores))\n",
+        "\n",
+        "    y_preds = model.predict(x_test)\n",
+        "    accuracy = accuracy_score(y_test, y_preds)\n",
+        "    recall = recall_score(y_test, y_preds)\n",
+        "\n",
+        "\n",
+        "    return accuracy, recall\n"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "id": "AYEo5hWfizmQ"
+      },
+      "outputs": [],
+      "source": [
+        "# Takes 17 minutes to run\n",
+        "from sklearn.svm import SVC\n",
+        "import numpy as np # Import numpy for unique function\n",
+        "from sklearn.model_selection import train_test_split, cross_val_score\n",
+        "from sklearn.metrics import accuracy_score, recall_score\n",
+        "\n",
+        "\n",
+        "def svm_classifier(x_data, y_data, kernel):\n",
+        "    # Check the unique values in y_data\n",
+        "    unique_classes = np.unique(y_data)\n",
+        "\n",
+        "    # Raise an error if only one unique class is found\n",
+        "    if len(unique_classes) < 2:\n",
+        "        raise ValueError(f\"The target variable 'y_data' must have at least 2 unique classes. Found {unique_classes}\")\n",
+        "\n",
+        "    x_train, x_test, y_train, y_test = train_test_split(x_data, y_data, test_size=0.2, random_state=42)\n",
+        "    model = SVC(kernel=kernel, class_weight='balanced', random_state=42)\n",
+        "    model.fit(x_train, y_train)\n",
+        "\n",
+        "    cross_val_scores = cross_val_score(model, x_train, y_train, cv=5)\n",
+        "    print(\"Cross-Validation Accuracy: \", np.mean(cross_val_scores))\n",
+        "\n",
+        "    y_preds = model.predict(x_test)\n",
+        "    accuracy = accuracy_score(y_test, y_preds)\n",
+        "    recall = recall_score(y_test, y_preds)\n",
+        "    test_accuracy = accuracy_score(y_test, y_preds)\n",
+        "\n",
+        "    confusion_matrix = metrics.confusion_matrix(y_test, y_preds)\n",
+        "\n",
+        "    cm_display = metrics.ConfusionMatrixDisplay(confusion_matrix = confusion_matrix, display_labels = [0, 1])\n",
+        "\n",
+        "    cm_display.plot()\n",
+        "    plt.show()\n",
+        "\n",
+        "    print(\"Test Accuracy:\", test_accuracy)\n",
+        "    print(\"Test Recall:\", recall)\n",
+        "\n",
+        "    return accuracy, recall\n",
+        "\n",
+        "\n",
+        "svm_classifier(Epochs_2D_Array, labels, 'rbf')\n",
+        "\n",
+        "import matplotlib.pyplot as plt\n",
+        "import numpy\n",
+        "from sklearn import metrics\n",
+        "\n",
+        "\n"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "UEOF8WHZ2inn"
+      },
+      "source": [
+        "#**Seizure Prediction - LSTM**"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "id": "ixveAJGw2hlP"
+      },
+      "outputs": [],
+      "source": [
+        " def lstm(x_train, y_train, x_test, y_test):\n",
+        "  dim1, dim2, dim3 = x_train.shape\n",
+        "  model = keras.Sequential()\n",
+        "  model.add(LSTM(32, activation = \"tanh\", input = (dim2, dim3)))\n",
+        "  model.add(LSTM(16, activation = 'tanh'))\n",
+        "  #model.add(Dense(22, activation = 'relu'))\n",
+        "  model.add(Dense(1, activation = 'sigmoid')) # change activation to sigmoid to keep values close to either 0 or 1 for binary classification\n",
+        "  model.compile(loss = \"binary_crossentropy\", optimizer = \"adam\", metrics = [keras.metrics.BinaryAccuracy(), keras.metrics.Precision(), keras.metrics.Recall(), keras.metrics.FalsePositives(), keras.metrics.FalseNegatives()]) # change loss function to BCE loss (binary crossentropy loss) to match with sigmoid\n",
+        "  #fitting model to training data and validating with test data\n",
+        "  model.fit(x_train, y_train, validation_data = (x_test, y_test))"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "id": "kj1touj4v_6F"
+      },
+      "outputs": [],
+      "source": [
+        "!pip install mne\n",
+        "\n",
+        "import numpy as np\n",
+        "import pandas as pd\n",
+        "import mne\n",
+        "import pickle\n",
+        "from sklearn.preprocessing import StandardScaler\n",
+        "import matplotlib.pyplot as plt\n",
+        "import seaborn as sns\n",
+        "\n",
+        "# For memory efficiency\n",
+        "import gc\n",
+        "from tqdm import tqdm\n",
+        "\n",
+        "# For visualization\n",
+        "import plotly.graph_objects as go\n",
+        "import plotly.express as px"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "id": "76gTMItRwKa4"
+      },
+      "outputs": [],
+      "source": [
+        "class EEGDataLoader:\n",
+        "    def __init__(self, batch_size=1000):\n",
+        "        \"\"\"Initialize the data loader\n",
+        "\n",
+        "        Args:\n",
+        "            batch_size: Number of epochs to load at once\n",
+        "        \"\"\"\n",
+        "        self.batch_size = batch_size\n",
+        "        self.scaler = StandardScaler()\n",
+        "\n",
+        "    def load_file(self, file_path, preload=False):\n",
+        "        \"\"\"Load an EDF file with memory management\n",
+        "\n",
+        "        Args:\n",
+        "            file_path: Path to the EDF file\n",
+        "            preload: Whether to load all data into memory\n",
+        "        \"\"\"\n",
+        "        try:\n",
+        "            raw = mne.io.read_raw_edf(file_path, preload=preload)\n",
+        "            print(f\"Successfully loaded {file_path}\")\n",
+        "            print(f\"Number of channels: {len(raw.ch_names)}\")\n",
+        "            print(f\"Sampling frequency: {raw.info['sfreq']} Hz\")\n",
+        "            print(f\"Recording length: {raw.n_times / raw.info['sfreq'] / 60:.2f} minutes\")\n",
+        "            return raw\n",
+        "        except Exception as e:\n",
+        "            print(f\"Error loading {file_path}: {str(e)}\")\n",
+        "            return None\n",
+        "\n",
+        "    def load_epochs(self, epochs_file):\n",
+        "        \"\"\"Load preprocessed epochs file\n",
+        "\n",
+        "        Args:\n",
+        "            epochs_file: Path to the epochs file\n",
+        "        \"\"\"\n",
+        "        try:\n",
+        "            with open(epochs_file, 'rb') as f:\n",
+        "                epochs = pickle.load(f)\n",
+        "            print(f\"Successfully loaded {epochs_file}\")\n",
+        "            print(f\"Number of epochs: {len(epochs)}\")\n",
+        "            print(f\"Epoch duration: {epochs.times[-1]:.1f} seconds\")\n",
+        "            return epochs\n",
+        "        except Exception as e:\n",
+        "            print(f\"Error loading {epochs_file}: {str(e)}\")\n",
+        "            return None\n",
+        "\n",
+        "    def load_labels(self, labels_file):\n",
+        "        \"\"\"Load label file\n",
+        "\n",
+        "        Args:\n",
+        "            labels_file: Path to the labels file\n",
+        "        \"\"\"\n",
+        "        try:\n",
+        "            with open(labels_file, 'rb') as f:\n",
+        "                labels = pickle.load(f)\n",
+        "            print(f\"Successfully loaded {labels_file}\")\n",
+        "            print(f\"Number of labels: {len(labels)}\")\n",
+        "            print(f\"Number of seizures: {np.sum(labels)}\")\n",
+        "            return labels\n",
+        "        except Exception as e:\n",
+        "            print(f\"Error loading {labels_file}: {str(e)}\")\n",
+        "            return None\n",
+        "\n",
+        "    def validate_data(self, epochs, labels):\n",
+        "        \"\"\"Validate that epochs and labels match\n",
+        "\n",
+        "        Args:\n",
+        "            epochs: MNE epochs object\n",
+        "            labels: numpy array of labels\n",
+        "        \"\"\"\n",
+        "        if len(epochs) != len(labels):\n",
+        "            raise ValueError(f\"Mismatch: {len(epochs)} epochs but {len(labels)} labels\")\n",
+        "        print(\"Data validation passed!\")"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "id": "qckI8ZUuwWMx"
+      },
+      "outputs": [],
+      "source": [
+        "class PreictalLabelCreator:\n",
+        "    def __init__(self, prediction_window=300, epoch_duration=5):\n",
+        "        \"\"\"Initialize the label creator\n",
+        "\n",
+        "        Args:\n",
+        "            prediction_window: How many seconds before seizure to mark as pre-ictal\n",
+        "            epoch_duration: Duration of each epoch in seconds\n",
+        "        \"\"\"\n",
+        "        self.prediction_window = prediction_window\n",
+        "        self.epoch_duration = epoch_duration\n",
+        "\n",
+        "    def create_preictal_labels(self, ictal_labels):\n",
+        "        \"\"\"Create pre-ictal labels from seizure (ictal) labels\n",
+        "\n",
+        "        Args:\n",
+        "            ictal_labels: Binary array where 1 indicates seizure\n",
+        "\n",
+        "        Returns:\n",
+        "            Array where 1 indicates pre-ictal period\n",
+        "        \"\"\"\n",
+        "        window_epochs = self.prediction_window // self.epoch_duration\n",
+        "        preictal_labels = np.zeros_like(ictal_labels)\n",
+        "\n",
+        "        # Find seizure onsets\n",
+        "        seizure_onsets = np.where(np.diff(ictal_labels) == 1)[0]\n",
+        "\n",
+        "        # Mark pre-ictal periods\n",
+        "        for onset in seizure_onsets:\n",
+        "            preictal_start = max(0, onset - window_epochs)\n",
+        "            preictal_labels[preictal_start:onset] = 1\n",
+        "\n",
+        "        return preictal_labels\n",
+        "\n",
+        "    def get_period_statistics(self, labels):\n",
+        "        \"\"\"Get statistics about different periods\n",
+        "\n",
+        "        Args:\n",
+        "            labels: The preictal labels array\n",
+        "        \"\"\"\n",
+        "        total_epochs = len(labels)\n",
+        "        preictal_epochs = np.sum(labels)\n",
+        "        interictal_epochs = total_epochs - preictal_epochs\n",
+        "\n",
+        "        print(f\"Total recording duration: {total_epochs * self.epoch_duration / 60:.1f} minutes\")\n",
+        "        print(f\"Pre-ictal time: {preictal_epochs * self.epoch_duration / 60:.1f} minutes\")\n",
+        "        print(f\"Inter-ictal time: {interictal_epochs * self.epoch_duration / 60:.1f} minutes\")\n",
+        "        print(f\"Pre-ictal ratio: {preictal_epochs / total_epochs * 100:.1f}%\")\n",
+        "\n",
+        "        return {\n",
+        "            'total_epochs': total_epochs,\n",
+        "            'preictal_epochs': preictal_epochs,\n",
+        "            'interictal_epochs': interictal_epochs\n",
+        "        }\n",
+        "\n",
+        "    def plot_label_distribution(self, labels):\n",
+        "        \"\"\"Plot the distribution of labels over time\"\"\"\n",
+        "        time_mins = np.arange(len(labels)) * self.epoch_duration / 60\n",
+        "\n",
+        "        fig = go.Figure()\n",
+        "        fig.add_trace(go.Scatter(\n",
+        "            x=time_mins,\n",
+        "            y=labels,\n",
+        "            mode='lines',\n",
+        "            name='Pre-ictal Periods'\n",
+        "        ))\n",
+        "\n",
+        "        fig.update_layout(\n",
+        "            title='Pre-ictal Periods Over Time',\n",
+        "            xaxis_title='Time (minutes)',\n",
+        "            yaxis_title='Label (1 = Pre-ictal)',\n",
+        "            showlegend=True\n",
+        "        )\n",
+        "\n",
+        "        fig.show()\n",
+        "\n",
+        "y_pred = (model.predict(X_test_reshaped) > 0.5).astype(int)  # Binary predictions\n",
+        "accuracy = accuracy_score(y_test, y_pred)\n",
+        "print(f\"Test Accuracy: {accuracy:.2f}\")"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "id": "kVBpQEtnwf6Z"
+      },
+      "outputs": [],
+      "source": [
+        "# # Initialize classes\n",
+        "# loader = EEGDataLoader()\n",
+        "# label_creator = PreictalLabelCreator(prediction_window=300)  # 5 minutes\n",
+        "\n",
+        "# # Load data\n",
+        "# epochs = loader.load_epochs('epoch_files/chb006.pkl')\n",
+        "# ictal_labels = loader.load_labels('label_files/chb06_labels.pkl')\n",
+        "\n",
+        "# # Validate data\n",
+        "# loader.validate_data(epochs, ictal_labels)\n",
+        "\n",
+        "# # Create pre-ictal labels\n",
+        "# preictal_labels = label_creator.create_preictal_labels(ictal_labels)\n",
+        "\n",
+        "# # Get and display statistics\n",
+        "# stats = label_creator.get_period_statistics(preictal_labels)\n",
+        "\n",
+        "# # Plot distribution\n",
+        "# label_creator.plot_label_distribution(preictal_labels)"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "26KsNXYlwoyP"
+      },
+      "source": [
+        "**Exercises for Students**\n",
+        "\n",
+        "**Data Loading:**\n",
+        "\n",
+        "Modify the EEGDataLoader to handle multiple files at once\n",
+        "Add error handling for corrupted files\n",
+        "Implement a progress bar for large files\n",
+        "\n",
+        "**Pre-ictal Labeling:**\n",
+        "\n",
+        "Try different prediction windows (e.g., 2 minutes, 10 minutes)\n",
+        "Create multiple pre-ictal classes (e.g., early pre-ictal vs late pre-ictal)\n",
+        "Add post-ictal period handling\n",
+        "\n",
+        "**Data Analysis:**\n",
+        "\n",
+        "Create additional visualizations of the data distribution\n",
+        "Analyze the frequency of seizures\n",
+        "Calculate and plot inter-seizure intervals\n",
+        "\n",
+        "**Memory Management:**\n",
+        "\n",
+        "Profile the memory usage of the current implementation\n",
+        "Implement data streaming for very large datasets\n",
+        "Add memory usage warnings\n"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "id": "bRAQZk7IxVDN"
+      },
+      "outputs": [],
+      "source": [
+        "import numpy as np\n",
+        "import pandas as pd\n",
+        "import mne\n",
+        "from scipy import signal\n",
+        "from scipy.stats import skew, kurtosis\n",
+        "from sklearn.preprocessing import StandardScaler\n",
+        "import matplotlib.pyplot as plt\n",
+        "import seaborn as sns\n",
+        "from tqdm import tqdm\n",
+        "\n",
+        "# For memory efficiency\n",
+        "import gc"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "id": "Q-6jEF0_xWHd"
+      },
+      "outputs": [],
+      "source": [
+        "class EEGFeatureExtractor:\n",
+        "    def __init__(self, fs=256):\n",
+        "        \"\"\"Initialize feature extractor\n",
+        "\n",
+        "        Args:\n",
+        "            fs: Sampling frequency of the EEG data\n",
+        "        \"\"\"\n",
+        "        self.fs = fs\n",
+        "        self.freq_bands = {\n",
+        "            'delta': (0.5, 4),\n",
+        "            'theta': (4, 8),\n",
+        "            'alpha': (8, 13),\n",
+        "            'beta': (13, 30),\n",
+        "            'gamma': (30, 45)\n",
+        "        }\n",
+        "\n",
+        "    def extract_time_features(self, data):\n",
+        "        \"\"\"Extract time domain features\n",
+        "\n",
+        "        Args:\n",
+        "            data: EEG data of shape (n_channels, n_samples)\n",
+        "        \"\"\"\n",
+        "        features = {}\n",
+        "\n",
+        "        # Statistical features\n",
+        "        features['mean'] = np.mean(data, axis=1)\n",
+        "        features['std'] = np.std(data, axis=1)\n",
+        "        features['skewness'] = skew(data, axis=1)\n",
+        "        features['kurtosis'] = kurtosis(data, axis=1)\n",
+        "\n",
+        "        # Hjorth parameters\n",
+        "        diff1 = np.diff(data, axis=1)\n",
+        "        diff2 = np.diff(diff1, axis=1)\n",
+        "\n",
+        "        features['mobility'] = np.std(diff1, axis=1) / np.std(data, axis=1)\n",
+        "        features['complexity'] = (np.std(diff2, axis=1) * np.std(data, axis=1)) / \\\n",
+        "                                (np.std(diff1, axis=1) ** 2)\n",
+        "\n",
+        "        return features\n",
+        "\n",
+        "    def extract_frequency_features(self, data):\n",
+        "        \"\"\"Extract frequency domain features\"\"\"\n",
+        "        features = {}\n",
+        "\n",
+        "        for band_name, (low, high) in self.freq_bands.items():\n",
+        "            # Filter the data\n",
+        "            filtered = mne.filter.filter_data(\n",
+        "                data.astype(np.float64),\n",
+        "                self.fs,\n",
+        "                low,\n",
+        "                high,\n",
+        "                method='iir'\n",
+        "            )\n",
+        "\n",
+        "            # Calculate band power\n",
+        "            power = np.mean(filtered ** 2, axis=1)\n",
+        "            features[f'{band_name}_power'] = power\n",
+        "\n",
+        "        # Calculate important ratios\n",
+        "        features['theta_beta_ratio'] = features['theta_power'] / features['beta_power']\n",
+        "        features['delta_theta_ratio'] = features['delta_power'] / features['theta_power']\n",
+        "\n",
+        "        return features\n",
+        "\n",
+        "    def extract_all_features(self, data):\n",
+        "        \"\"\"Extract all features\"\"\"\n",
+        "        time_features = self.extract_time_features(data)\n",
+        "        freq_features = self.extract_frequency_features(data)\n",
+        "\n",
+        "        # Combine features\n",
+        "        all_features = {}\n",
+        "        all_features.update(time_features)\n",
+        "        all_features.update(freq_features)\n",
+        "\n",
+        "        return all_features"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "id": "92fjho2Bxp2b"
+      },
+      "outputs": [],
+      "source": [
+        "class SequenceGenerator:\n",
+        "    def __init__(self, seq_length, stride=1, feature_extractor=None):\n",
+        "        \"\"\"Initialize sequence generator\n",
+        "\n",
+        "        Args:\n",
+        "            seq_length: Number of time steps in each sequence\n",
+        "            stride: Step size between sequences\n",
+        "            feature_extractor: Instance of EEGFeatureExtractor\n",
+        "        \"\"\"\n",
+        "        self.seq_length = seq_length\n",
+        "        self.stride = stride\n",
+        "        self.feature_extractor = feature_extractor or EEGFeatureExtractor()\n",
+        "        self.scaler = StandardScaler()\n",
+        "\n",
+        "    def create_sequences(self, data, labels, include_features=True):\n",
+        "        \"\"\"Create sequences for LSTM input\n",
+        "\n",
+        "        Args:\n",
+        "            data: EEG data of shape (n_samples, n_channels, n_times)\n",
+        "            labels: Binary labels array\n",
+        "            include_features: Whether to extract additional features\n",
+        "        \"\"\"\n",
+        "        sequences = []\n",
+        "        sequence_labels = []\n",
+        "        features_list = []\n",
+        "\n",
+        "        print(\"Creating sequences...\")\n",
+        "        for i in tqdm(range(0, len(data) - self.seq_length, self.stride)):\n",
+        "            # Get sequence\n",
+        "            seq = data[i:i + self.seq_length]\n",
+        "\n",
+        "            if include_features:\n",
+        "                # Extract features for the sequence\n",
+        "                features = self.feature_extractor.extract_all_features(seq.reshape(-1, seq.shape[-1]))\n",
+        "                features_list.append(list(features.values()))\n",
+        "\n",
+        "            sequences.append(seq)\n",
+        "            sequence_labels.append(labels[i + self.seq_length - 1])\n",
+        "\n",
+        "        X_seq = np.array(sequences)\n",
+        "        y_seq = np.array(sequence_labels)\n",
+        "\n",
+        "        if include_features:\n",
+        "            X_features = np.array(features_list)\n",
+        "            X_features = self.scaler.fit_transform(X_features)\n",
+        "            return X_seq, X_features, y_seq\n",
+        "\n",
+        "        return X_seq, y_seq\n",
+        "\n",
+        "    def balance_dataset(self, X_seq, X_features, y_seq, max_ratio=3.0):\n",
+        "        \"\"\"Balance dataset by undersampling majority class\n",
+        "\n",
+        "        Args:\n",
+        "            X_seq: Sequence data\n",
+        "            X_features: Extracted features\n",
+        "            y_seq: Labels\n",
+        "            max_ratio: Maximum ratio between classes\n",
+        "        \"\"\"\n",
+        "        # Find indices for each class\n",
+        "        pos_idx = np.where(y_seq == 1)[0]\n",
+        "        neg_idx = np.where(y_seq == 0)[0]\n",
+        "\n",
+        "        # Determine sampling size\n",
+        "        n_pos = len(pos_idx)\n",
+        "        n_neg = min(len(neg_idx), int(n_pos * max_ratio))\n",
+        "\n",
+        "        # Sample negative class\n",
+        "        neg_idx = np.random.choice(neg_idx, size=n_neg, replace=False)\n",
+        "\n",
+        "        # Combine indices\n",
+        "        keep_idx = np.concatenate([pos_idx, neg_idx])\n",
+        "        np.random.shuffle(keep_idx)\n",
+        "\n",
+        "        return X_seq[keep_idx], X_features[keep_idx], y_seq[keep_idx]"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "id": "tC8qxymMxwnD"
+      },
+      "outputs": [],
+      "source": [
+        "# # Load preprocessed data from Part 1\n",
+        "# with open('epoch_files/chb006.pkl', 'rb') as f:\n",
+        "#     epochs = pickle.load(f)\n",
+        "\n",
+        "# with open('preictal_labels.pkl', 'rb') as f:\n",
+        "#     labels = pickle.load(f)\n",
+        "\n",
+        "# # Convert epochs to numpy array\n",
+        "# data = epochs.get_data()\n",
+        "\n",
+        "# # Create sequences\n",
+        "# seq_gen = SequenceGenerator(seq_length=20, stride=5)\n",
+        "# X_seq, X_features, y_seq = seq_gen.create_sequences(data, labels)\n",
+        "\n",
+        "# # Balance dataset\n",
+        "# X_seq_bal, X_features_bal, y_seq_bal = seq_gen.balance_dataset(\n",
+        "#     X_seq, X_features, y_seq, max_ratio=3.0\n",
+        "# )\n",
+        "\n",
+        "# # Print shapes\n",
+        "# print(f\"Sequence shape: {X_seq_bal.shape}\")\n",
+        "# print(f\"Features shape: {X_features_bal.shape}\")\n",
+        "# print(f\"Labels shape: {y_seq_bal.shape}\")\n",
+        "\n",
+        "# # Plot class distribution\n",
+        "# plt.figure(figsize=(10, 4))\n",
+        "# plt.subplot(1, 2, 1)\n",
+        "# sns.countplot(y_seq)\n",
+        "# plt.title('Before Balancing')\n",
+        "\n",
+        "# plt.subplot(1, 2, 2)\n",
+        "# sns.countplot(y_seq_bal)\n",
+        "# plt.title('After Balancing')\n",
+        "\n",
+        "# plt.tight_layout()\n",
+        "# plt.show()"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "E8_w1yl7x4fG"
+      },
+      "source": [
+        "**Exercises for Students**\n",
+        "\n",
+        "**Feature Engineering:**\n",
+        "\n",
+        "Add new time-domain features (e.g., zero crossings, line length)\n",
+        "Implement additional frequency band ratios\n",
+        "Create your own feature selection method\n",
+        "**Sequence Generation:**\n",
+        "\n",
+        "Experiment with different sequence lengths\n",
+        "Try various stride values\n",
+        "Implement data augmentation techniques\n",
+        "\n",
+        "**Data Analysis:**\n",
+        "\n",
+        "Analyze feature importance using correlation\n",
+        "Visualize sequences using different techniques\n",
+        "Study the impact of balance ratio on data distribution"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "id": "Es3sVY9fyLzQ"
+      },
+      "outputs": [],
+      "source": [
+        "import numpy as np\n",
+        "import tensorflow as tf\n",
+        "from tensorflow.keras.models import Model\n",
+        "from tensorflow.keras.layers import (\n",
+        "    Input, LSTM, Dense, Dropout, concatenate,\n",
+        "    BatchNormalization, Bidirectional\n",
+        ")\n",
+        "from tensorflow.keras.callbacks import (\n",
+        "    EarlyStopping, ModelCheckpoint,\n",
+        "    ReduceLROnPlateau, TensorBoard\n",
+        ")\n",
+        "from tensorflow.keras.metrics import AUC\n",
+        "from sklearn.metrics import (\n",
+        "    classification_report, confusion_matrix,\n",
+        "    roc_curve, precision_recall_curve\n",
+        ")\n",
+        "import matplotlib.pyplot as plt\n",
+        "import seaborn as sns\n",
+        "from datetime import datetime"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "id": "fC5dcgkEyRdL"
+      },
+      "outputs": [],
+      "source": [
+        "class SeizurePredictor:\n",
+        "    def __init__(self,\n",
+        "                 sequence_shape,\n",
+        "                 feature_shape,\n",
+        "                 lstm_units=[64, 32], # Can try changing num_units\n",
+        "                 dense_units=[32], # Can try changing num_units\n",
+        "                 dropout_rate=0.3):\n",
+        "        \"\"\"Initialize seizure prediction model\n",
+        "\n",
+        "        Args:\n",
+        "            sequence_shape: Shape of EEG sequences (seq_len, n_channels, n_times)\n",
+        "            feature_shape: Shape of engineered features\n",
+        "            lstm_units: List of units in LSTM layers\n",
+        "            dense_units: List of units in Dense layers\n",
+        "            dropout_rate: Dropout rate for regularization\n",
+        "        \"\"\"\n",
+        "        self.sequence_shape = sequence_shape\n",
+        "        self.feature_shape = feature_shape\n",
+        "        self.lstm_units = lstm_units\n",
+        "        self.dense_units = dense_units\n",
+        "        self.dropout_rate = dropout_rate\n",
+        "        self.model = self._build_model()\n",
+        "\n",
+        "    def _build_model(self):\n",
+        "        \"\"\"Build the hybrid LSTM model\"\"\"\n",
+        "        # Sequence input branch\n",
+        "        seq_input = Input(shape=self.sequence_shape, name='sequence_input')\n",
+        "        x = seq_input\n",
+        "\n",
+        "        # LSTM layers\n",
+        "        for i, units in enumerate(self.lstm_units):\n",
+        "            return_sequences = i < len(self.lstm_units) - 1\n",
+        "            x = Bidirectional(LSTM(units, return_sequences=return_sequences))(x) # Can add more BiDirectional Layers\n",
+        "            x = BatchNormalization()(x)\n",
+        "            x = Dropout(self.dropout_rate)(x)\n",
+        "\n",
+        "        # Feature input branch\n",
+        "        feature_input = Input(shape=self.feature_shape, name='feature_input')\n",
+        "\n",
+        "        # Combine branches\n",
+        "        combined = concatenate([x, feature_input])\n",
+        "\n",
+        "        # Dense layers\n",
+        "        for units in self.dense_units:\n",
+        "            combined = Dense(units, activation='relu')(combined) # Can add more dense layers here\n",
+        "            combined = BatchNormalization()(combined) # 1 for each dense layer\n",
+        "            combined = Dropout(self.dropout_rate)(combined)\n",
+        "\n",
+        "\n",
+        "        # Output layer\n",
+        "        output = Dense(1, activation='sigmoid')(combined)\n",
+        "\n",
+        "        # Create model\n",
+        "        model = Model(inputs=[seq_input, feature_input], outputs=output)\n",
+        "\n",
+        "        return model\n",
+        "\n",
+        "    def compile_model(self, learning_rate=0.001, class_weights=None):\n",
+        "        \"\"\"Compile the model with custom loss and metrics\n",
+        "\n",
+        "        Args:\n",
+        "            learning_rate: Initial learning rate\n",
+        "            class_weights: Weights for different classes\n",
+        "        \"\"\"\n",
+        "        # Custom focal loss to handle class imbalance\n",
+        "        def focal_loss(gamma=2., alpha=.25):\n",
+        "            def focal_loss_fixed(y_true, y_pred):\n",
+        "                pt_1 = tf.where(tf.equal(y_true, 1), y_pred, tf.ones_like(y_pred))\n",
+        "                pt_0 = tf.where(tf.equal(y_true, 0), y_pred, tf.zeros_like(y_pred))\n",
+        "                return -tf.reduce_mean(\n",
+        "                    alpha * tf.pow(1. - pt_1, gamma) * tf.math.log(pt_1 + 1e-7) +\n",
+        "                    (1-alpha) * tf.pow(pt_0, gamma) * tf.math.log(1. - pt_0 + 1e-7)\n",
+        "                )\n",
+        "            return focal_loss_fixed\n",
+        "\n",
+        "        optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)\n",
+        "\n",
+        "        self.model.compile(\n",
+        "            optimizer=optimizer,\n",
+        "            loss=focal_loss(),\n",
+        "            metrics=['accuracy',\n",
+        "                    tf.keras.metrics.Precision(),\n",
+        "                    tf.keras.metrics.Recall(),\n",
+        "                    AUC()]\n",
+        "        )\n",
+        "\n",
+        "    def create_callbacks(self, patience=10):\n",
+        "        \"\"\"Create training callbacks\n",
+        "\n",
+        "        Args:\n",
+        "            patience: Number of epochs to wait for improvement\n",
+        "        \"\"\"\n",
+        "        # Create log directory for tensorboard\n",
+        "        log_dir = \"logs/fit/\" + datetime.now().strftime(\"%Y%m%d-%H%M%S\")\n",
+        "\n",
+        "        callbacks = [\n",
+        "            EarlyStopping(\n",
+        "                monitor='val_loss',\n",
+        "                patience=patience,\n",
+        "                restore_best_weights=True\n",
+        "            ),\n",
+        "            ModelCheckpoint(\n",
+        "                'best_model.h5',\n",
+        "                monitor='val_loss',\n",
+        "                save_best_only=True\n",
+        "            ),\n",
+        "            ReduceLROnPlateau(\n",
+        "                monitor='val_loss',\n",
+        "                factor=0.5,\n",
+        "                patience=patience//2,\n",
+        "                min_lr=1e-6\n",
+        "            ),\n",
+        "            TensorBoard(log_dir=log_dir)\n",
+        "        ]\n",
+        "\n",
+        "        return callbacks\n"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "id": "mANQIMa_yb9D"
+      },
+      "outputs": [],
+      "source": [
+        "class TrainingPipeline:\n",
+        "    def __init__(self, predictor):\n",
+        "        \"\"\"Initialize training pipeline\n",
+        "\n",
+        "        Args:\n",
+        "            predictor: Instance of SeizurePredictor\n",
+        "        \"\"\"\n",
+        "        self.predictor = predictor\n",
+        "\n",
+        "    def train(self,\n",
+        "              X_train_seq, X_train_features, y_train,\n",
+        "              X_val_seq, X_val_features, y_val,\n",
+        "              batch_size=32,\n",
+        "              epochs=100,\n",
+        "              class_weights=None):\n",
+        "        \"\"\"Train the model\n",
+        "\n",
+        "        Args:\n",
+        "            X_train_seq: Training sequences\n",
+        "            X_train_features: Training features\n",
+        "            y_train: Training labels\n",
+        "            X_val_seq: Validation sequences\n",
+        "            X_val_features: Validation features\n",
+        "            y_val: Validation labels\n",
+        "        \"\"\"\n",
+        "        # Compile model\n",
+        "        self.predictor.compile_model(class_weights=class_weights)\n",
+        "\n",
+        "        # Get callbacks\n",
+        "        callbacks = self.predictor.create_callbacks()\n",
+        "\n",
+        "        # Train model\n",
+        "        history = self.predictor.model.fit(\n",
+        "            [X_train_seq, X_train_features],\n",
+        "            y_train,\n",
+        "            validation_data=([X_val_seq, X_val_features], y_val),\n",
+        "            batch_size=batch_size,\n",
+        "            epochs=epochs,\n",
+        "            class_weight=class_weights,\n",
+        "            callbacks=callbacks,\n",
+        "            verbose=1\n",
+        "        )\n",
+        "\n",
+        "        return history\n",
+        "\n",
+        "    def evaluate(self, X_test_seq, X_test_features, y_test):\n",
+        "        \"\"\"Evaluate the model\n",
+        "\n",
+        "        Args:\n",
+        "            X_test_seq: Test sequences\n",
+        "            X_test_features: Test features\n",
+        "            y_test: Test labels\n",
+        "        \"\"\"\n",
+        "        # Get predictions\n",
+        "        y_pred_prob = self.predictor.model.predict([X_test_seq, X_test_features])\n",
+        "        y_pred = (y_pred_prob > 0.5).astype(int)\n",
+        "\n",
+        "        # Print classification report\n",
+        "        print(\"\\nClassification Report:\")\n",
+        "        print(classification_report(y_test, y_pred))\n",
+        "\n",
+        "        # Plot confusion matrix\n",
+        "        plt.figure(figsize=(8, 6))\n",
+        "        sns.heatmap(\n",
+        "            confusion_matrix(y_test, y_pred),\n",
+        "            annot=True,\n",
+        "            fmt='d',\n",
+        "            cmap='Blues'\n",
+        "        )\n",
+        "        plt.title('Confusion Matrix')\n",
+        "        plt.ylabel('True Label')\n",
+        "        plt.xlabel('Predicted Label')\n",
+        "        plt.show()\n",
+        "\n",
+        "        return y_pred_prob\n"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "id": "0H9CqM9lyhvF"
+      },
+      "outputs": [],
+      "source": [
+        "# # Load preprocessed data from Part 2\n",
+        "# # Assuming X_seq, X_features, y are already balanced and split\n",
+        "\n",
+        "# # Split into train, validation, and test sets\n",
+        "# from sklearn.model_selection import train_test_split\n",
+        "\n",
+        "# # First split into train+val and test\n",
+        "# X_temp_seq, X_test_seq, X_temp_feat, X_test_feat, y_temp, y_test = train_test_split(\n",
+        "#     X_seq, X_features, y, test_size=0.2, random_state=42\n",
+        "# )\n",
+        "\n",
+        "# # Then split train+val into train and val\n",
+        "# X_train_seq, X_val_seq, X_train_feat, X_val_feat, y_train, y_val = train_test_split(\n",
+        "#     X_temp_seq, X_temp_feat, y_temp, test_size=0.2, random_state=42\n",
+        "# )\n",
+        "\n",
+        "# # Initialize model\n",
+        "# predictor = SeizurePredictor(\n",
+        "#     sequence_shape=X_train_seq.shape[1:],\n",
+        "#     feature_shape=X_train_feat.shape[1:],\n",
+        "#     lstm_units=[64, 32],\n",
+        "#     dense_units=[32],\n",
+        "#     dropout_rate=0.3\n",
+        "# )\n",
+        "\n",
+        "# # Create training pipeline\n",
+        "# pipeline = TrainingPipeline(predictor)\n",
+        "\n",
+        "# # Train model\n",
+        "# history = pipeline.train(\n",
+        "#     X_train_seq, X_train_feat, y_train,\n",
+        "#     X_val_seq, X_val_feat, y_val,\n",
+        "#     batch_size=32,\n",
+        "#     epochs=100\n",
+        "# )\n",
+        "\n",
+        "# # Evaluate model\n",
+        "# y_pred_prob = pipeline.evaluate(X_test_seq, X_test_feat, y_test)\n",
+        "\n",
+        "# # Plot training history\n",
+        "# plt.figure(figsize=(12, 4))\n",
+        "\n",
+        "# plt.subplot(1, 2, 1)\n",
+        "# plt.plot(history.history['loss'], label='Training Loss')\n",
+        "# plt.plot(history.history['val_loss'], label='Validation Loss')\n",
+        "# plt.title('Model Loss')\n",
+        "# plt.xlabel('Epoch')\n",
+        "# plt.ylabel('Loss')\n",
+        "# plt.legend()\n",
+        "\n",
+        "# plt.subplot(1, 2, 2)\n",
+        "# plt.plot(history.history['accuracy'], label='Training Accuracy')\n",
+        "# plt.plot(history.history['val_accuracy'], label='Validation Accuracy')\n",
+        "# plt.title('Model Accuracy')\n",
+        "# plt.xlabel('Epoch')\n",
+        "# plt.ylabel('Accuracy')\n",
+        "# plt.legend()\n",
+        "\n",
+        "# plt.tight_layout()\n",
+        "# plt.show()"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "2bxzz_CPyvLi"
+      },
+      "source": [
+        "**Exercises for Students**\n",
+        "\n",
+        "**Model Architecture:**\n",
+        "\n",
+        "Try different LSTM architectures (stacked, residual connections)\n",
+        "Experiment with different numbers of layers and units\n",
+        "Implement attention mechanisms\n",
+        "Add regularization techniques\n",
+        "\n",
+        "**Loss Functions:**\n",
+        "\n",
+        "Implement custom loss functions that penalize late predictions\n",
+        "Try different focal loss parameters\n",
+        "Create a loss function that considers prediction timing\n",
+        "\n",
+        "**Evaluation Metrics:**\n",
+        "\n",
+        "Implement clinically relevant metrics (e.g., prediction horizon)\n",
+        "Create visualization tools for false alarms\n",
+        "Add statistical tests for model comparison\n",
+        "\n",
+        "**Model Optimization:**\n",
+        "\n",
+        "Implement cross-validation\n",
+        "Try different optimizers and learning rate schedules\n",
+        "Add model ensembling\n",
+        "\n",
+        "**Next Steps:**\n",
+        "\n",
+        "Test model on longer continuous recordings\n",
+        "Evaluate performance across different patients\n",
+        "Implement real-time prediction pipeline\n",
+        "Consider deployment requirements\n",
+        "Add visualization tools for clinical interpretation\n"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "ag_H4s8r4yse"
+      },
+      "source": [
+        "# **Clean Up Intermediate Folders**\n",
+        "\n",
+        "*   Remove chunk files and temporary epoch files.\n",
+        "*   Keep only final epoch and final label file. We will use these later when we combine all the data folders."
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "id": "FCDJf5925F6Z"
+      },
+      "outputs": [],
+      "source": [
+        "import shutil\n",
+        "\n",
+        "def remove_chunk_files():\n",
+        "  \"\"\"Removes chunk files from the intermediate_data folder.\"\"\"\n",
+        "  try:\n",
+        "    for filename in glob.glob('intermediate_data/chunk_*.pkl'):\n",
+        "      os.remove(filename)\n",
+        "    print(\"Chunk files removed successfully.\")\n",
+        "  except Exception as e:\n",
+        "    print(f\"Error removing chunk files: {str(e)}\")\n",
+        "\n",
+        "remove_chunk_files()"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "id": "YJvVRj40C3MP"
+      },
+      "outputs": [],
+      "source": [
+        "def remove_temp_epoch_files():\n",
+        "  \"\"\"Removes temp epoch files from the intermediate_data folder.\"\"\"\n",
+        "  try:\n",
+        "    for filename in glob.glob('intermediate_data/epochs_*.pkl'):\n",
+        "      os.remove(filename)\n",
+        "    print(\"Temp Epochs files removed successfully.\")\n",
+        "  except Exception as e:\n",
+        "    print(f\"Error removing temo epochs files: {str(e)}\")\n",
+        "\n",
+        "remove_temp_epoch_files()"
+      ]
+    }
+  ],
+  "metadata": {
+    "colab": {
+      "collapsed_sections": [
+        "ag_H4s8r4yse"
+      ],
+      "gpuType": "T4",
+      "provenance": [],
+      "toc_visible": true,
+      "include_colab_link": true
+    },
+    "kernelspec": {
+      "display_name": "Python 3",
+      "name": "python3"
+    },
+    "language_info": {
+      "codemirror_mode": {
+        "name": "ipython",
+        "version": 3
+      },
+      "file_extension": ".py",
+      "mimetype": "text/x-python",
+      "name": "python",
+      "nbconvert_exporter": "python",
+      "pygments_lexer": "ipython3",
+      "version": "3.9.12"
+    },
+    "vscode": {
+      "interpreter": {
+        "hash": "9510fcfd21240a39351487ed704d80204a1786395f73a4eb7dfdf25ded8ba45a"
+      }
+    }
+  },
+  "nbformat": 4,
+  "nbformat_minor": 0
+}
