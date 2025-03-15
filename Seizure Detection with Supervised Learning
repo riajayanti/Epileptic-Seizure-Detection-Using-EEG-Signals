@@ -25,16 +25,6 @@ from pyriemann import classification as classify
 from keras.layers import LSTM, Dense, RNN
 from keras.callbacks import ReduceLROnPlateau
 
-# Run each data folder one by one. Later we will add code to combine.
-
-#/content/drive/Shareddrives/riajayanti/physionet.org/files/chbmit/1.0.0
-#/content/drive/Shareddrives/riajayanti/physionet.org/files/chbmit/1.0.0/chb01/chb01_01.edf
-#/content/drive/Shareddrives/riajayanti/physionet.org/files/chbmit/1.0.0/chb01/chb01_03.edf.seizures
-
-data_folder = '/content/drive/Shareddrives/riajayanti/physionet.org/files/chbmit/1.0.0/chb01/'
-
-
-
 # This functions takes in file name (e.g. chb01_02.edf) and returns folder name (e.g. chb01)
 def get_folder_name(file_name):
     folder_name, num = file_name.split("_")
